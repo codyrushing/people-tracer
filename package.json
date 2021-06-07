@@ -1,0 +1,28 @@
+{
+  "name": "people-tracer",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "ts-node index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codyrushing/people-tracer.git"
+  },
+  "author": "codyrushing",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/codyrushing/people-tracer/issues"
+  },
+  "homepage": "https://github.com/codyrushing/people-tracer#readme",
+  "dependencies": {
+    "imagetracerjs": "^1.2.6",
+    "ws": "^7.4.6"
+  },
+  "devDependencies": {
+    "ts-node": "^10.0.0",
+    "typescript": "^4.3.2"
+  }
+}
