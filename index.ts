@@ -1,9 +1,9 @@
 import cluster from 'cluster';
 import ws from 'ws';
-import { imagedataToSVG, imagedataToTracedata } from 'imagetracerjs';
+import { imagedataToTracedata /*, imagedataToSVG*/ } from 'imagetracerjs';
 import os = require('os');
 const numCPUs = os.cpus().length;
-import { TraceData } from './util/trace';
+import { TraceData, normalizeTraceData, Pose } from './util/trace';
 
 if(cluster.isMaster){
   // MASTER
@@ -18,17 +18,17 @@ if(cluster.isMaster){
 else {
   // WORKER
   const wss = new ws.Server({ port: 8080 });
+  wss.on('listening', () => console.log('listening'));
   wss.on('connection', function connection(client) {
     client.on('message', function incoming(message) {
       const now = Date.now();
       const {
         heatmap: bitmap,
         poses
-      } = JSON.parse(message);
-      if(poses.length){
-        // 640 * 480
-        console.log(poses[0].keypoints[0].point);
-      }
+      } : { heatmap: any, poses: Pose[]} = JSON.parse(message);
+
+      poses;
+
       const width = bitmap[0].length;
       const height = bitmap.length;
       // flatten bitmap into single array of floats 0...255
@@ -47,40 +47,46 @@ else {
         data[start] = 0;
         data[start+1] = 0;
         data[start+2] = 0;
-        // TODO, why am i thresholding here?
-        data[start+3] = pixels[i] 
+        data[start+3] = pixels[i] * 255;
+        /* alternative strategy - threshold 0 - 255
+        data[start+3] = pixels[i]
           ? 255
           : 0;
+        */
       }
 
-      imagedataToSVG;
-  
-      // const svg = imagedataToSVG(
-      //   {
-      //     data,
-      //     width,
-      //     height
-      //   }
-      // );
-  
-      // svg.toString();
-
-      const traceData : TraceData = imagedataToTracedata(
+      /*
+      const svg = imagedataToSVG(
         {
           data,
           width,
           height
         }
       );
+  
+      console.log(svg.toString());
+      */
 
-      console.log(traceData);
+      const traceData : TraceData = imagedataToTracedata({
+        data,
+        width,
+        height
+      });
 
-      // for(let layer of traceData.layers){
-      //   console.log('start segments');
-      //   for(let path of layer){
-      //     console.log(path.segments);
-      //   }
-      // }
+      normalizeTraceData(traceData);
+
+      console.log(traceData.layers.length);
+
+      for(let layer of traceData.layers){
+        console.log('begin layer');
+        console.log(layer);
+        // for(let path of layer){
+        //   console.log('boundingbox');
+        //   console.log(path.boundingbox);
+        //   console.log('segments');
+        //   console.log(path.segments);
+        // }
+      }
 
       console.log('ms elapsed', Date.now() - now);
     });
