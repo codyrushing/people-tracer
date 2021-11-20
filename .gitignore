@@ -106,3 +106,4 @@ dist
 temp/
 build/
 .DS_Store
+.parcel-cache
