@@ -1,38 +1,37 @@
-export interface TracePathSegmentLine {
-  type: 'L';
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-};
+import pointInPolygon from 'point-in-polygon';
 
-export interface TracePathSegmentCurve {
-  type: 'Q';
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  x3: number;
-  y3: number;
-};
+export const KEYPOINTS = [
+  'nose',
+  'left eye',
+  'right eye',
+  'left ear',
+  'right ear',
+  'left shoulder',
+  'right shoulder',
+  'left elbow',
+  'right elbow',
+  'left wrist',
+  'right wrist',
+  'left hip',
+  'right hip',
+  'left knee',
+  'right knee',
+  'left ankle',
+  'right ankle'
+];
 
-export interface TracePath {
-  boundingbox: [number, number, number, number];
-  holechildren: number[];
-  isholepath: boolean;
-  segments: (TracePathSegmentLine | TracePathSegmentCurve)[]
-};
-
-export type Layer = TracePath[];
-
-export type PaletteColor = [number, number, number, number];
-
-export interface TraceData {
-  layers: Layer[];
-  palette: PaletteColor[];
-  width: number;
-  height: number;
-};
+// define primary detection keypoints to detect a person
+export const detectionKeypointIndeces = [
+  0, // nose
+  1, // left eye
+  2, // right eye
+  5, // left shoulder
+  6, // right shoulder
+  7, // left knee
+  8, // right knee
+  11, // left hip
+  12 // right hip
+];
 
 export type Point = [number, number];
 
@@ -46,63 +45,80 @@ export interface Pose {
   keypoints: Keypoint[]
 }
 
-export function normalizeTraceData(traceData:TraceData){
-  const { layers, width, height } = traceData;
-  for(const layer of layers){
-    for(const path of layer){
-      let { boundingbox, segments } = path;
-      // normalize bounding box
-      boundingbox.forEach(
-        (v, i) => {
-          boundingbox[i] /= i % 2 === 0
-          ? width
-          : height
+export interface PersonGroup {
+  poses: Pose[]
+}
+
+export interface Dimensions {
+  width: number,
+  height: number
+}
+
+export type Contour = number[][];
+
+export function normalizeContours(contours : Contour[], { width, height }: Dimensions) : Contour[] {
+  contours.forEach(
+    path => {
+      // normalize to 0..1 coords
+      path.forEach(
+        point => {
+          point[0] /= width;
+          point[1] /= height
         }
-      );
-      // normalize segments
-      for(const segment of segments){
-        for(const xKey of ['x1', 'x2', 'x3']){
-          if(segment.hasOwnProperty(xKey)){
-            segment[xKey] /= width;
+      )
+    }
+  );
+  return contours;
+}
+
+export interface PersonGroup {
+  contour: Contour,
+  holes: Contour[],
+  poses: Pose[]
+}
+
+/* 
+iterate through poses, and find the contours they correspond to :
+* contain a pose (which means they are definitely a person)
+* are contained within another pose which means they are a hole contour
+*/
+export function extractPersonGroups(contours : Contour[], poses: Pose[]) : PersonGroup[] {
+  const personGroups = [];
+  // start by looking through poses
+  for(const pose of poses){
+    // check all contours to find one that is 
+    let foundContourForPose : boolean = false;
+    for(const contour of contours){
+      for(let ki of detectionKeypointIndeces){
+        const poseKeypoint = pose.keypoints.find(({ki: ki0}) => ki === ki0);
+        if(poseKeypoint && pointInPolygon(poseKeypoint.point, contour)){
+          // this contour contains a detection keypoint
+          foundContourForPose = true;
+          // look for an existing group that has this contour
+          let group : PersonGroup = personGroups.find(
+            ({contour: contour0}) => contour0 === contour
+          );
+          if(!group){
+            group = {
+              contour,
+              holes: [],
+              poses: []
+            }
+            personGroups.push(group);
           }
+          // add pose to group and exit 
+          group.poses.push(pose);
+          break;
         }
-        for(const yKey of ['y1', 'y2', 'y3']){
-          if(segment.hasOwnProperty(yKey)){
-            segment[yKey] /= height;
-          }
-        }
+      }
+      if(foundContourForPose){
+        break;
       }
     }
   }
-  return traceData;
-}
 
-interface PersonGroup {
-  poses: Pose[],
-  layer: Layer
-}
+  // TODO
+  // now iterate through unused contours and see if they are inside any of the found group contours?
 
-export function getPosesForSegments(segments: (TracePathSegmentLine | TracePathSegmentCurve)[], poses: Pose[]) : Pose[] {
-  // TODO, in this function, create a polygon from segments, and check which poses
-  // have keypoints that fall within that polygon
-  return poses;
-}
-
-export function mergeTraceDataWithPoses(traceData: TraceData, poses: Pose[]) : PersonGroup[] {
-  const { layers } = traceData;
-  const personGroups : PersonGroup[] = [];
-
-  for(const layer of layers){
-    for(const path of layer){
-      let matchingPoses = getPosesForSegments(path.segments, poses);
-      if(matchingPoses.length){
-        personGroups.push({
-          poses: matchingPoses,
-          layer
-        })
-      }
-      
-    }
-  }
   return personGroups;
 }

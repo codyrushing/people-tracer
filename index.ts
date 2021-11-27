@@ -1,19 +1,14 @@
 import cluster from 'cluster';
 import ws from 'ws';
 import { exec } from 'child_process';
-import { imagedataToTracedata, imagedataToSVG } from 'imagetracerjs';
 import os = require('os');
 const numCPUs = os.cpus().length;
-import { TraceData, normalizeTraceData, Pose } from './util/trace';
-
-imagedataToTracedata;
-let something : TraceData;
-normalizeTraceData;
-something;
+import { extractPersonGroups, normalizeContours, Pose } from './util/trace';
+import ndArrayPack from 'ndarray-pack';
+import contour2d from 'contour-2d';
 
 // const bodypixCommand = 'python3 bodypix_gl_imx.py --jpeg --model models/bodypix_mobilenet_v1_075_1024_768_16_quant_edgetpu_decoder.tflite --videosrc /dev/video1 --width 1280 --height 720 --mirror';
 const bodypixCommand = 'python3 bodypix_gl_imx.py --jpeg --model models/bodypix_mobilenet_v1_075_768_576_16_quant_edgetpu_decoder.tflite --videosrc /dev/video1 --width 1280 --height 720 --mirror';
-
 function exitHandler() {
   // whatever happened to get us here - log it
   for(const arg of arguments){
@@ -59,73 +54,46 @@ export function startWebsocketServer(){
   });
   wss.on('connection', function connection(client) {
     client.on('message', function incoming(message) {
-      const now = Date.now();
-      now;
-      const {
-        heatmap: bitmap,
-        poses
-      } : { heatmap: any, poses: Pose[]} = JSON.parse(message);
+      try {
+        const now = Date.now();
+        now;
+        const {
+          heatmap: bitmap,
+          poses
+        } : { heatmap: any, poses: Pose[]} = JSON.parse(message);
+        const width = bitmap[0].length;
+        const height = bitmap.length;
+                
+        const contours = normalizeContours(contour2d(ndArrayPack(
+          bitmap.map(
+            r => r.map(
+              p => p >= 1 ? 1 : 0
+            )
+          )
+        )), { width, height });
+        
+        const personGroups = extractPersonGroups(contours, poses);
 
-      poses;
-
-      const width = bitmap[0].length;
-      const height = bitmap.length;
-
-      width;
-      height;
-      // flatten bitmap into single array of floats 0...255
-      const pixels = bitmap.reduce(
-        (acc, v) => {
-          acc = acc.concat(v);
-          return acc;
-        },
-        []
-      );
-      
-      const data = new Uint8ClampedArray(pixels.length * 4);
-
-      for(let i=0; i<pixels.length; i++){
-          // set each pixel to black with variable 
-          let start = i * 4;
-          data[start] = 0;
-          data[start+1] = 0;
-          data[start+2] = 0;
-          data[start+3] = pixels[i] * 255;
-          /* alternative strategy - threshold 0 - 255
-          data[start+3] = pixels[i]
-            ? 255
-            : 0;
-          */
+        wss.clients.forEach(function each(client) {
+          if (client.readyState === ws.OPEN) {
+            client.send(personGroups);
+          }
+        });
+  
+        // const traceData : TraceData = imagedataToTracedata({
+        //   data,
+        //   width,
+        //   height
+        // });
+  
+        // normalizeTraceData(traceData);
+  
+        // console.log('ms elapsed', Date.now() - now);   
       }
-
-      const svg = imagedataToSVG(
-        {
-          data,
-          width,
-          height
-        },
-        {
-          // pathomit:0,
-          // qtres: 0.01,
-          // ltres: 0.1
-        }
-      );
-      
-      wss.clients.forEach(function each(client) {
-        if (client.readyState === ws.OPEN) {
-          client.send(svg.toString());
-        }
-      });
-
-      // const traceData : TraceData = imagedataToTracedata({
-      //   data,
-      //   width,
-      //   height
-      // });
-
-      // normalizeTraceData(traceData);
-
-      // console.log('ms elapsed', Date.now() - now);    
+      catch(err){
+        console.error(err);
+      }
+ 
     });
   });  
 }
