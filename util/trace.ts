@@ -56,19 +56,34 @@ export interface Dimensions {
 
 export type Contour = number[][];
 
+export const truncateFloat = ((n : number) : number => Math.round(n * 10000)/10000);
+
 export function normalizeContours(contours : Contour[], { width, height }: Dimensions) : Contour[] {
   contours.forEach(
     path => {
       // normalize to 0..1 coords
       path.forEach(
         point => {
-          point[0] /= width;
-          point[1] /= height
+          point[0] = truncateFloat(point[0] / width);
+          point[1] = truncateFloat(point[1] / height);
         }
       )
     }
   );
   return contours;
+}
+
+export function normalizePose(pose : Pose) : Pose {
+  for(const keypoint of pose.keypoints){
+    keypoint.point = [
+      truncateFloat(keypoint.point[0]),
+      truncateFloat(keypoint.point[1])
+    ];
+    if(typeof keypoint.score === 'string'){
+      keypoint.score = truncateFloat(parseFloat(keypoint.score));
+    }
+  }
+  return pose;
 }
 
 export interface PersonGroup {
@@ -82,7 +97,7 @@ iterate through poses, and find the contours they correspond to :
 * contain a pose (which means they are definitely a person)
 * are contained within another pose which means they are a hole contour
 */
-export function extractPersonGroups(contours : Contour[], poses: Pose[]) : PersonGroup[] {
+export function getPersonGroups(contours : Contour[], poses: Pose[]) : PersonGroup[] {
   const personGroups = [];
   // start by looking through poses
   for(const pose of poses){
@@ -117,8 +132,20 @@ export function extractPersonGroups(contours : Contour[], poses: Pose[]) : Perso
     }
   }
 
-  // TODO
-  // now iterate through unused contours and see if they are inside any of the found group contours?
+  // compute hole contours
+  const matchedContours = personGroups.map(({contour}) => contour);
+  const unmatchedContours = contours.filter(c => !matchedContours.includes(c));
+  for(const unmatchedContour of unmatchedContours){
+    for(const matchedContour of matchedContours){
+      if(pointInPolygon(unmatchedContour[0], matchedContour)){
+        // if this unmatched contour is inside a matched contour, then add it as a hole
+        // to the person group with that matched contour
+        const { holes } = personGroups.find(({contour}) => contour === matchedContour);
+        holes.push(unmatchedContour);
+        break;
+      }
+    }
 
+  }
   return personGroups;
 }

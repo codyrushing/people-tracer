@@ -4,7 +4,13 @@ import * as PIXI from 'pixi.js';
 const WEBSOCKET_HOST = 'ws://localhost:8080';
 const client = new ws.w3cwebsocket(WEBSOCKET_HOST);
 
-const app = new PIXI.Application();
+const app = new PIXI.Application({
+  width: window.innerWidth,
+  height: window.innerHeight,
+  view: document.querySelector('canvas#canvas')
+});
+
+app;
 
 client.onerror = function(err) {
   console.log('Connection Error');
@@ -20,9 +26,8 @@ client.onclose = function() {
 };
 
 client.onmessage = ({data}) => {
+  // console.log(event);
   if(typeof data === 'string'){
-    console.log(data);
+    console.log(JSON.parse(data));
   }
 };
-
-document.body.appendChild(app.view);

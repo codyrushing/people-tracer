@@ -3,7 +3,7 @@ import ws from 'ws';
 import { exec } from 'child_process';
 import os = require('os');
 const numCPUs = os.cpus().length;
-import { extractPersonGroups, normalizeContours, Pose } from './util/trace';
+import { getPersonGroups, normalizeContours, normalizePose, Pose } from './util/trace';
 import ndArrayPack from 'ndarray-pack';
 import contour2d from 'contour-2d';
 
@@ -57,12 +57,14 @@ export function startWebsocketServer(){
       try {
         const now = Date.now();
         now;
-        const {
+        let {
           heatmap: bitmap,
           poses
         } : { heatmap: any, poses: Pose[]} = JSON.parse(message);
         const width = bitmap[0].length;
         const height = bitmap.length;
+        
+        poses = poses.map(normalizePose);
                 
         const contours = normalizeContours(contour2d(ndArrayPack(
           bitmap.map(
@@ -72,11 +74,11 @@ export function startWebsocketServer(){
           )
         )), { width, height });
         
-        const personGroups = extractPersonGroups(contours, poses);
-
+        const personGroups = getPersonGroups(contours, poses);
+        personGroups;
         wss.clients.forEach(function each(client) {
           if (client.readyState === ws.OPEN) {
-            client.send(personGroups);
+            client.send(JSON.stringify(personGroups));
           }
         });
   
