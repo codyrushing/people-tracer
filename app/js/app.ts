@@ -28,6 +28,6 @@ client.onclose = function() {
 client.onmessage = ({data}) => {
   // console.log(event);
   if(typeof data === 'string'){
-    console.log(JSON.parse(data));
+    // console.log(JSON.parse(data));
   }
 };

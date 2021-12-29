@@ -39,6 +39,7 @@ export interface Keypoint {
   ki: number;
   point: Point;
   score: number;
+  v?: [number, number]
 }
 
 export interface Pose {
@@ -145,6 +146,27 @@ export function getPersonGroups(contours : Contour[], poses: Pose[]) : PersonGro
         break;
       }
     }
+
+  }
+  return personGroups;
+}
+
+export interface Frame {
+  t: Date,
+  personGroups: PersonGroup[]
+}
+
+// keep a list of frames in memory
+export let frames : Frame[] = [];
+export function addFrame(frame: Frame) : Frame[] {
+  frames.unshift(frame);
+  frames = frames.slice(0, 5);
+  return frames;
+}
+
+export function computePersonGroupContinuity(personGroups : PersonGroup[]) : PersonGroup[] {
+  const previousFrame = frames[0];
+  if(previousFrame){
 
   }
   return personGroups;
