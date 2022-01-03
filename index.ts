@@ -3,7 +3,7 @@ import ws from 'ws';
 import { exec } from 'child_process';
 import os = require('os');
 const numCPUs = os.cpus().length;
-import { getPersonGroups, normalizeContours, normalizePose, Pose, PersonGroup, frames } from './util/trace';
+import { getPersonGroups, normalizeContours, normalizePose, Pose, PersonGroup, processIncomingFrame } from './util/trace';
 import ndArrayPack from 'ndarray-pack';
 import contour2d from 'contour-2d';
 
@@ -75,15 +75,14 @@ export function startWebsocketServer(){
         )), { width, height });
         
         const personGroups : PersonGroup[] = getPersonGroups(contours, poses);
-
-        frames.unshift({
+        const frame = processIncomingFrame({
           t: new Date(),
           personGroups
         });
 
         wss.clients.forEach(function each(client) {
           if (client.readyState === ws.OPEN) {
-            client.send(JSON.stringify(personGroups));
+            client.send(JSON.stringify(frame));
           }
         });
   

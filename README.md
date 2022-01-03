@@ -12,3 +12,5 @@ ssh mendel@arid-snail
 
 ## Notes
 * Good discussion on different 2D rendering engines: https://news.ycombinator.com/item?id=23083730
+* Drawing paths and simplifying https://github.com/pixijs/pixijs/issues/2674 https://www.npmjs.com/package/simplify-path
+

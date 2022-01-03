@@ -1,4 +1,5 @@
 import pointInPolygon from 'point-in-polygon';
+import createVec2 as create from 'gl-vec2';
 
 export const KEYPOINTS = [
   'nose',
@@ -46,10 +47,6 @@ export interface Pose {
   keypoints: Keypoint[]
 }
 
-export interface PersonGroup {
-  poses: Pose[]
-}
-
 export interface Dimensions {
   width: number,
   height: number
@@ -88,6 +85,7 @@ export function normalizePose(pose : Pose) : Pose {
 }
 
 export interface PersonGroup {
+  id?: number,
   contour: Contour,
   holes: Contour[],
   poses: Pose[]
@@ -165,9 +163,49 @@ export function addFrame(frame: Frame) : Frame[] {
 }
 
 export function computePersonGroupContinuity(personGroups : PersonGroup[]) : PersonGroup[] {
-  const previousFrame = frames[0];
-  if(previousFrame){
+  personGroups.forEach(
+    ({poses}) => {
+      // look at the last three frames
+      for(let i=0; i<3; i++){
+        let comparisonFrame = frames[frames.length-(1 + i)];
+        if(!comparisonFrame){
+          break;
+        }
 
+        for(let comparisonPersonGroup of comparisonFrame.personGroups){
+          let comparisonKeypoints = comparisonPersonGroup.poses.reduce(
+            (acc, v) => {
+              acc = acc.concat(v.keypoints);
+              return acc;
+            },
+            []
+          );
+
+          for(let pose of poses){
+            let matchCount = 0;
+            let missCount = 0;
+  
+            for(let keypoint of pose.keypoints){
+              let keypointPosition = 
+              const matchingKeypoints = comparisonKeypoints.filter(k => k.ki === keypoint.ki);
+              // found matching keypoints
+              if(matchingKeypoints.length){
+
+              }
+            }
+          }  
+
+        }        
+
+      }    
+    }
+  )
+
+
+  
+
+  if(previousFrame){
+    personGroups
   }
   return personGroups;
 }
