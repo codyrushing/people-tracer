@@ -76,7 +76,9 @@ export function startWebsocketServer(){
         
         const personGroups : PersonGroup[] = getPersonGroups(contours, poses);
         const frame = processIncomingFrame({
-          t: new Date(),
+          t: Date.now(),
+          width,
+          height,
           personGroups
         });
 

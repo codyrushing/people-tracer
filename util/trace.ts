@@ -1,5 +1,5 @@
 import pointInPolygon from 'point-in-polygon';
-import createVec2 as create from 'gl-vec2';
+import glVec2 from 'gl-vec2';
 
 export const KEYPOINTS = [
   'nose',
@@ -38,9 +38,11 @@ export type Point = [number, number];
 
 export interface Keypoint {
   ki: number;
-  point: Point;
+  pos: Point;
   score: number;
-  v?: [number, number]
+  dpos: [number, number] | null;
+  dt: number | null;
+  mv: number | null;
 }
 
 export interface Pose {
@@ -73,9 +75,9 @@ export function normalizeContours(contours : Contour[], { width, height }: Dimen
 
 export function normalizePose(pose : Pose) : Pose {
   for(const keypoint of pose.keypoints){
-    keypoint.point = [
-      truncateFloat(keypoint.point[0]),
-      truncateFloat(keypoint.point[1])
+    keypoint.pos = [
+      truncateFloat(keypoint.pos[0]),
+      truncateFloat(keypoint.pos[1])
     ];
     if(typeof keypoint.score === 'string'){
       keypoint.score = truncateFloat(parseFloat(keypoint.score));
@@ -88,6 +90,10 @@ export interface PersonGroup {
   id?: number,
   contour: Contour,
   holes: Contour[],
+  bbox?: [
+    [number, number],
+    [number, number]
+  ] | null,
   poses: Pose[]
 }
 
@@ -100,12 +106,12 @@ export function getPersonGroups(contours : Contour[], poses: Pose[]) : PersonGro
   const personGroups = [];
   // start by looking through poses
   for(const pose of poses){
-    // check all contours to find one that is 
+    // check all contours to find one that has this pose inside it
     let foundContourForPose : boolean = false;
     for(const contour of contours){
       for(let ki of detectionKeypointIndeces){
         const poseKeypoint = pose.keypoints.find(({ki: ki0}) => ki === ki0);
-        if(poseKeypoint && pointInPolygon(poseKeypoint.point, contour)){
+        if(poseKeypoint && pointInPolygon(poseKeypoint.pos, contour)){
           // this contour contains a detection keypoint
           foundContourForPose = true;
           // look for an existing group that has this contour
@@ -131,6 +137,39 @@ export function getPersonGroups(contours : Contour[], poses: Pose[]) : PersonGro
     }
   }
 
+  // compute bounding box from contour
+  personGroups.forEach(
+    (personGroup: PersonGroup) => {
+      const { contour } = personGroup;
+      const bbox : [[number, number], [number, number]] = [[1,1],[0,0]];
+      for(const [x, y] of contour){
+        const minX = bbox[0][0] || 1;
+        const maxX = bbox[1][0] || 0;
+        const minY = bbox[0][1] || 1;
+        const maxY = bbox[1][1] || 0;
+
+        // set min x
+        if(minX !== 0 && x < minX){
+          bbox[0][0] = x;
+        }
+        // set max x
+        else if(maxX !== 1 && x > maxY) {
+          bbox[1][0] = x;
+        }
+
+        // set min y
+        if(minY !== 0 && y < minY){
+          bbox[0][1] = y;
+        }
+        // set max y
+        else if(maxY !== 1 && y > maxY) {
+          bbox[1][1] = y;
+        }
+      }
+      personGroup.bbox = bbox;        
+    }
+  )
+
   // compute hole contours
   const matchedContours = personGroups.map(({contour}) => contour);
   const unmatchedContours = contours.filter(c => !matchedContours.includes(c));
@@ -139,18 +178,19 @@ export function getPersonGroups(contours : Contour[], poses: Pose[]) : PersonGro
       if(pointInPolygon(unmatchedContour[0], matchedContour)){
         // if this unmatched contour is inside a matched contour, then add it as a hole
         // to the person group with that matched contour
-        const { holes } = personGroups.find(({contour}) => contour === matchedContour);
+        const { holes } = personGroups.find(({contour}) => contour === matchedContour);        
         holes.push(unmatchedContour);
         break;
       }
     }
-
   }
   return personGroups;
 }
 
 export interface Frame {
-  t: Date,
+  t: number,
+  width: number,
+  height: number,
   personGroups: PersonGroup[]
 }
 
@@ -162,18 +202,27 @@ export function addFrame(frame: Frame) : Frame[] {
   return frames;
 }
 
-export function computePersonGroupContinuity(personGroups : PersonGroup[]) : PersonGroup[] {
+export function processIncomingFrame(frame : Frame) : Frame {
+  const { t, personGroups, width, height } = frame;
   personGroups.forEach(
-    ({poses}) => {
+    (group, i) => {
+      const { poses, bbox } = group;
+      // compute personGroup height from the bounding box
+      const bodyHeightPx = (bbox[1][1] - bbox[0][1]) * height;
+      
+      let numberOfMatchingKeypoints = 0;
+      let matchingPersonGroup;
+
       // look at the last three frames
       for(let i=0; i<3; i++){
         let comparisonFrame = frames[frames.length-(1 + i)];
         if(!comparisonFrame){
           break;
-        }
-
-        for(let comparisonPersonGroup of comparisonFrame.personGroups){
-          let comparisonKeypoints = comparisonPersonGroup.poses.reduce(
+        }        
+                
+        for(let comparisonPersonGroup of comparisonFrame.personGroups){          
+          let matchingKeypoints = new Map();
+          let comparisonKeypoints : Keypoint[] = comparisonPersonGroup.poses.reduce(
             (acc, v) => {
               acc = acc.concat(v.keypoints);
               return acc;
@@ -182,30 +231,88 @@ export function computePersonGroupContinuity(personGroups : PersonGroup[]) : Per
           );
 
           for(let pose of poses){
-            let matchCount = 0;
-            let missCount = 0;
-  
             for(let keypoint of pose.keypoints){
-              let keypointPosition = 
-              const matchingKeypoints = comparisonKeypoints.filter(k => k.ki === keypoint.ki);
-              // found matching keypoints
-              if(matchingKeypoints.length){
+              // if keypoint already has a dpos (velocity), then continue
+              // TODO maybe find a better way to exit here
+              if(Array.isArray(keypoint.dpos)){
+                continue;
+              }
+              // get position of this keypoint in pixel units
+              let keypointPositionPx = glVec2.set(
+                glVec2.create(),
+                keypoint.pos[0] * width,
+                keypoint.pos[1] * height
+              );
 
+              const matchingKeypoint : Keypoint = comparisonKeypoints
+                // find keypoints with same id in comparison frame
+                .filter(k => k.ki === keypoint.ki)
+                // find the one that is the closest and within the threshold
+                .reduce(
+                  (acc, v) => {
+                    const comparisonPointPx = glVec2.set(
+                      glVec2.create(), 
+                      v.pos[0] * comparisonFrame.width,
+                      v.pos[1] * comparisonFrame.height
+                    );
+                    const distancePx = glVec2.distance(comparisonPointPx, keypointPositionPx);
+                    // if this point is within the threshold relative to body height
+                    // and is closer than other matching points
+                    if(                      
+                      distancePx / bodyHeightPx <= 0.1
+                      &&
+                      (!acc || glVec2.distance(glVec2.set(glVec2.create(), acc.pos[0] * width, acc.pos[1] * height), keypointPositionPx) > distance)
+                    ){
+                      acc = v;
+                    }
+                    return acc;
+                  }                 
+                );
+
+              // this keypoint matches
+              if(matchingKeypoint){
+                // associate the current keypoint with its matchingKeypoint
+                matchingKeypoints.set(keypoint, matchingKeypoint);
               }
             }
-          }  
+          }
 
-        }        
+          // this comparison group has more matching keypoints, so it is considered the matchingPersonGroup
+          if(matchingKeypoints.size > numberOfMatchingKeypoints){
+            matchingPersonGroup = comparisonPersonGroup;
+          }
 
-      }    
+          // step through each matching keypoint and calculate stateful values
+          matchingKeypoints.forEach(
+            (currentKeypoint : Keypoint, previousKeypoint: Keypoint) => {
+              // set change in position (velocity)
+              currentKeypoint.dpos = glVec2.subtract(glVec2.create(), currentKeypoint.pos, previousKeypoint.pos);
+              // set change in time (ms)
+              currentKeypoint.dt = t - comparisonFrame.t
+              // create a movement factor, which is the length of the dpos vector, over time, over body height 
+              // to account for distance from the camera              
+              currentKeypoint.mv = glVec2.length([0,0], currentKeypoint.dpos) / currentKeypoint.dt / bodyHeightPx * 1000;
+            }
+          )
+        }
+
+      }
+      
+      // assign an id to this group, either from a match that was found
+      // or from incrementing
+      let id = i;
+      if(matchingPersonGroup){
+        id = matchingPersonGroup.id;
+      }
+      // no matching personGroup was found, so try to increment
+      else {
+        while(personGroups.find(pg => pg.id === id)){
+          id += 1;
+        }
+      }
+      group.id = id;
     }
   )
-
-
-  
-
-  if(previousFrame){
-    personGroups
-  }
-  return personGroups;
+  addFrame(frame);
+  return frame;
 }
