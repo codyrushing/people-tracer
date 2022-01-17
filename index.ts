@@ -1,11 +1,15 @@
+import 'dotenv';
 import cluster from 'cluster';
 import ws from 'ws';
 import { exec } from 'child_process';
 import os = require('os');
-const numCPUs = os.cpus().length;
 import { getPersonGroups, normalizeContours, normalizePose, Pose, PersonGroup, processIncomingFrame } from './util/trace';
 import ndArrayPack from 'ndarray-pack';
 import contour2d from 'contour-2d';
+
+const { WEBSOCKET_PORT=8080 } = process.env;
+
+const numCPUs = os.cpus().length;
 
 // const bodypixCommand = 'python3 bodypix_gl_imx.py --jpeg --model models/bodypix_mobilenet_v1_075_1024_768_16_quant_edgetpu_decoder.tflite --videosrc /dev/video1 --width 1280 --height 720 --mirror';
 const bodypixCommand = 'python3 bodypix_gl_imx.py --jpeg --model models/bodypix_mobilenet_v1_075_768_576_16_quant_edgetpu_decoder.tflite --videosrc /dev/video1 --width 1280 --height 720 --mirror';
@@ -35,7 +39,7 @@ const USE_MULTI_PROCESS = false;
 
 export function startWebsocketServer(){
   // WORKER
-  const wss = new ws.Server({ port: 8080 });
+  const wss = new ws.Server({ port: WEBSOCKET_PORT });
 
   wss.on('error', err => {
     console.error(err);
@@ -84,7 +88,10 @@ export function startWebsocketServer(){
 
         wss.clients.forEach(function each(client) {
           if (client.readyState === ws.OPEN) {
-            client.send(JSON.stringify(frame));
+            client.send(JSON.stringify({
+              type: 'frame',
+              payload: frame
+            }));
           }
         });
   

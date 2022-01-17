@@ -261,12 +261,13 @@ export function processIncomingFrame(frame : Frame) : Frame {
                     if(                      
                       distancePx / bodyHeightPx <= 0.1
                       &&
-                      (!acc || glVec2.distance(glVec2.set(glVec2.create(), acc.pos[0] * width, acc.pos[1] * height), keypointPositionPx) > distance)
+                      (!acc || glVec2.distance(glVec2.set(glVec2.create(), acc.pos[0] * width, acc.pos[1] * height), keypointPositionPx) > distancePx)
                     ){
                       acc = v;
                     }
                     return acc;
-                  }                 
+                  },
+                  null               
                 );
 
               // this keypoint matches
@@ -293,7 +294,7 @@ export function processIncomingFrame(frame : Frame) : Frame {
               // to account for distance from the camera              
               currentKeypoint.mv = glVec2.length([0,0], currentKeypoint.dpos) / currentKeypoint.dt / bodyHeightPx * 1000;
             }
-          )
+          );
         }
 
       }
