@@ -1,18 +1,20 @@
+import '../styles/app.less';
 import * as PIXI from 'pixi.js';
 import './lib/websocket';
 import { initProgramStageManager } from './stages';
+import { initViewportManager } from './utils/viewport';
 
-const container : HTMLCanvasElement = document.querySelector('canvas#canvas');
+export const container : HTMLCanvasElement = document.querySelector('canvas#canvas');
 
-const app = new PIXI.Application({
+export function getContainer() : HTMLCanvasElement {
+  return container;
+}
+
+export const app = new PIXI.Application({  
   width: window.innerWidth,
   height: window.innerHeight,
   view: container
 });
 
-export function getContainer(){
-  return container;
-}
-
+initViewportManager();
 initProgramStageManager();
-app;

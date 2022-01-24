@@ -3,7 +3,9 @@ import { Frame } from '../../../util/trace';
 
 type Events = {
   frame: Frame,
-  startProgramStage: string,
+  startProgramStage: {
+    name: string
+  },
   command: string
 }
 

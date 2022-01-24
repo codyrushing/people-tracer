@@ -12,7 +12,7 @@ export interface ProgramStage {
 
 export const CURRENT_STAGE_PROGRAM_NAME_KEY = 'current_stage_program';
 let currentStage;  
-async function startProgramStage(name) : Promise<ProgramStage> {
+async function startProgramStage(name:string, params:any={}) : Promise<ProgramStage> {
   if(!name){
     return currentStage;
   }
@@ -23,12 +23,13 @@ async function startProgramStage(name) : Promise<ProgramStage> {
     }
     currentStage = newStage;
     window.sessionStorage.setItem(CURRENT_STAGE_PROGRAM_NAME_KEY, name);
-    await currentStage.init();
+    return await currentStage.init(params);
   }
-  return currentStage;
+  return new Promise(resolve => resolve(currentStage));
 }
+
 export async function initProgramStageManager() : Promise<ProgramStage> {
-  eventEmitter.on('startProgramStage', startProgramStage);
+  eventEmitter.on('startProgramStage', ({name, ...params}) => startProgramStage(name, params));
   currentStage = startProgramStage(window.sessionStorage.getItem(CURRENT_STAGE_PROGRAM_NAME_KEY) || 'debug') ;
   return currentStage;
 }

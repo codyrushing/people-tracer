@@ -22,12 +22,17 @@ function createWebsocket(){
   
   client.onmessage = ({data}) => {
     if(typeof data === 'string'){
-      const { type, payload } = JSON.parse(data);
-      eventEmitter.emit(type, payload);
+      try {
+        const { type, payload } = JSON.parse(data);
+        eventEmitter.emit(type, payload);  
+      }
+      catch(err){
+        console.error(err);
+      }
     }
   };
 
   return client;
 }
 
-createWebsocket();
+// createWebsocket();
