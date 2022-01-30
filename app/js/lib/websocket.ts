@@ -35,4 +35,4 @@ function createWebsocket(){
   return client;
 }
 
-// createWebsocket();
+createWebsocket();

@@ -202,6 +202,7 @@ export function addFrame(frame: Frame) : Frame[] {
   return frames;
 }
 
+let totalPersonCount = 0;
 export function processIncomingFrame(frame : Frame) : Frame {
   const { t, personGroups, width, height } = frame;
   personGroups.forEach(
@@ -301,14 +302,15 @@ export function processIncomingFrame(frame : Frame) : Frame {
       
       // assign an id to this group, either from a match that was found
       // or from incrementing
-      let id = i;
+      let id = totalPersonCount;
       if(matchingPersonGroup){
         id = matchingPersonGroup.id;
       }
       // no matching personGroup was found, so try to increment
       else {
         while(personGroups.find(pg => pg.id === id)){
-          id += 1;
+          totalPersonCount += 1;
+          id = totalPersonCount;
         }
       }
       group.id = id;
