@@ -20,7 +20,8 @@ function getContainerNameForPersonGroup(personGroup : PersonGroup){
   return `persongroup_${personGroup.id}`;
 }
 
-function onDebugFrame(frame){
+// the purpose of this function is to update allRenderData
+function onDebugFrame(frame) : PersonGroupRenderData[] {
   frames.unshift(frame);
   frames = frames.slice(0,5);
 
@@ -36,6 +37,7 @@ function onDebugFrame(frame){
 
   // iterate through all personGroups
   for(const personGroup of frame.personGroups){
+    // find matching group by id
     let renderData = allRenderData.find(({personGroup:pg}) => pg.id === personGroup.id);
     let renderUpdate : any = {
       personGroup,
@@ -58,6 +60,7 @@ function onDebugFrame(frame){
       Object.assign(renderData, renderUpdate);
     }
   }
+  return allRenderData;
 }
 
 const waitingText = new PIXI.Text('Waiting for frames...', new PIXI.TextStyle({
@@ -78,8 +81,8 @@ async function init(){
 
 async function destroy(){
   //
-  eventEmitter.off('frame', onDebugFrame);
-  console.log('destroy');
+  // eventEmitter.off('frame', onDebugFrame);
+  // console.log('destroy');
 }
 
 async function run(){
@@ -88,17 +91,54 @@ async function run(){
     function onDebugRender(seconds) {
       renderSeconds.unshift(seconds);
       renderSeconds = renderSeconds.slice(0, 5);
-      const { offsetWidth: width } = app.view;
+      const { offsetWidth: width, offsetHeight: height } = app.view;
       const fontSize = Math.round(width / 25);
 
-      if(!frames.length){
+      if(!frames.length){        
         waitingText.style.fontSize = `${fontSize}px`;
         waitingText.x = fontSize;
         waitingText.y = fontSize;
         app.stage.addChild(waitingText);
         return;
+      }      
+
+      app.stage.removeChild(waitingText);
+
+      // render things
+      for(const personGroupRenderData of allRenderData){
+        const { personGroup, container, isExiting } = personGroupRenderData;
+        const g = new PIXI.Graphics();
+        g.closePath();
+
+        app.stage.removeChild(container);
+        container.removeChildren();
+
+        if(isExiting){
+          continue;
+        }
+
+        // set a fill and line style
+        g.beginFill(0xFF3300);
+        g.lineStyle(2, 0xffd900, 1);
+
+        let i = 0;
+        for(const [x,y] of personGroup.contour){
+          if(i === 0){
+            g.moveTo(x * width, y * height);
+          }
+          g.lineTo(x * width, y * height);
+          i++;
+        }
+
+        // draw a shape
+        g.closePath();
+        g.endFill();
+
+        container.addChild(g);
+        app.stage.addChild(container);
       }
-      // console.log(allRenderData);
+
+
     }
   );
 }

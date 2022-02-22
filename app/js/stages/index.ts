@@ -29,7 +29,7 @@ async function startProgramStage(name:string, params:any={}) : Promise<ProgramSt
 }
 
 export async function initProgramStageManager() : Promise<ProgramStage> {
-  eventEmitter.on('startProgramStage', ({name, ...params}) => startProgramStage(name, params));
+  eventEmitter.on('startProgramStage', ({name, ...params}) => startProgramStage(name, params));  
   currentStage = startProgramStage(window.sessionStorage.getItem(CURRENT_STAGE_PROGRAM_NAME_KEY) || 'debug') ;
   return currentStage;
 }
