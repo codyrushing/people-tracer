@@ -1,5 +1,6 @@
 import pointInPolygon from 'point-in-polygon';
 import glVec2 from 'gl-vec2';
+import { memoize } from 'lodash';
 
 export const KEYPOINTS = [
   'nose',
@@ -54,7 +55,18 @@ export interface Dimensions {
   height: number
 }
 
-export type Contour = number[][];
+export type HeatmapPixel = {
+  x: number;
+  y: number;
+  score: number;
+  visited?: boolean;
+  isUsedInContour?: boolean;
+}
+
+export const isSameHeatmapPixel = (p0, p1) => p0.x === p1.x && p0.y === p1.y;
+export type ContourVertex = [ number, number ];
+export type Contour = ContourVertex[];
+export type Heatmap = number[][];
 
 export const truncateFloat = ((n : number) : number => Math.round(n * 10000)/10000);
 
@@ -84,6 +96,156 @@ export function normalizePose(pose : Pose) : Pose {
     }
   }
   return pose;
+}
+
+export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
+  const width = heatmap[0].length;
+  const height = heatmap.length;
+  const contours = [];
+  let c = 0;
+  let r = 0;  
+
+  const getPixelAt = memoize(
+    function getPixelAtFn(x : number, y : number) : HeatmapPixel | null {
+      return {
+        x,
+        y,
+        score: heatmap[x] && typeof heatmap[x][y] === 'number'
+          ? heatmap[x][y]
+          : null
+      };
+    },
+    function getPixelAtResolver(x, y){
+      return `${x},${y}`;
+    }
+  );
+
+  function isEdge(p : HeatmapPixel) : boolean {
+    // if this pixel is not empty and it has at least one empty neighbor 
+    return !!p.score && !!adjacentNeighborsOffsets.find(([dx,dy]) => {
+      const n = getPixelAt(p.x+dx, p.y+dy);
+      return !n.score;
+    });
+  }
+
+  /* 
+  // returns all neighbors including diagonals
+  * * *
+  * ? *
+  * * *
+  */
+  const neighborOffsets = [
+    [-1, -1], // top left
+    [0, -1], // top center
+    [1, -1], // top right
+    [1, 0], // center right
+    [1, 1], // bottom right
+    [0, 1], // bottom center
+    [-1, 1], // bottom left
+    [-1, 0] // center left
+  ];
+
+  /*
+  // returns only adjacent neigbhors
+    *
+  * ? *
+    *  
+  */
+  const adjacentNeighborsOffsets = neighborOffsets.filter((_, i) => i % 2 === 1)
+
+  function getAdjacentNeighbors() : HeatmapPixel[] {
+    return adjacentNeighborsOffsets.map(([dx, dy]) => getPixelAt(c+dx, r+dy));
+  }
+
+  // try to get groups of contiguous pixels from an arbitrary array of pixels
+  function getContiguousPixels(pixels: HeatmapPixel[]) : HeatmapPixel[][] {
+    return pixels.reduce(
+      (acc, v, i, arr) => {        
+        const group = [];
+        function hasBeenUsed(p : HeatmapPixel) : boolean {
+          // flatten all
+          return !!acc.reduce(
+            (_acc, v) => {
+              _acc = _acc.concat(v);
+              return _acc;
+            },
+            []
+          )
+          .find(_v => isSameHeatmapPixel(_v, p))
+        };
+
+        function getAdjacents(v){
+          return arr.filter(p => (p.x === v.x && Math.abs(p.y - v.y) === 1) || (p.y === v.y && Math.abs(p.x - v.x) === 1));
+        };
+
+        function iterate(item){
+          if(!hasBeenUsed(item)){
+            group.push(item);
+            for(const adjacent of getAdjacents(item)){
+              iterate(adjacent)
+            }            
+          }
+        };
+        iterate(v);
+
+        if(group.length){
+          acc.push(group);
+        }
+        return acc;
+      },
+      []
+    );
+  }
+  
+  function getContourVertex(pixel: HeatmapPixel, emptyNeighbor: HeatmapPixel){
+
+  }
+
+
+  while(r < height && c < width){
+    let p = getPixelAt(c, r);
+    if(isEdge(p)){
+      // found edge pixel, start tracing
+      const contour = [];
+      const neighborGroups = getContiguousPixels(getAdjacentNeighbors());
+
+      const vPrev = contour[contour.length-1];
+      if(!contour[contour.length-1]){
+        neighborGroups[0][0]
+      }
+
+
+      for(const neighbor of neighborGroups){
+
+      }
+
+
+      do {
+        if(contour.length){
+
+        }
+        const v = contour
+        // look through neighbors to find one that is an edge and hasn't been used yet        
+        pNext = neighborOffsets.find(([dx, dy]) => {
+          const _p = getPixelAt(c+dx, c+dy);
+          return _p && !_p.isUsedInContour && isEdge(_p);
+        });
+        if(pNext){
+          // continue building contour          
+          pNext.isContour = true;
+        }
+      } while(pNext);
+      contours.push(contour);
+    }
+
+    // iterate
+    c += 1;
+    if(c >= width){
+      c = 0;
+      r += 1;
+    }
+  }
+  return contours;
 }
 
 export interface PersonGroup {
