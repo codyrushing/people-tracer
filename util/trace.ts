@@ -1,5 +1,6 @@
 import pointInPolygon from 'point-in-polygon';
 import glVec2 from 'gl-vec2';
+import { createVector, vectorDifference } from './vector';
 import { memoize } from 'lodash';
 
 export const KEYPOINTS = [
@@ -55,15 +56,16 @@ export interface Dimensions {
   height: number
 }
 
-export type HeatmapPixel = {
+export type HeatmapRegion = {
   x: number;
   y: number;
+  coords: () => [number, number];
   score: number;
   visited?: boolean;
-  isUsedInContour?: boolean;
+  contour?: Contour
 }
 
-export const isSameHeatmapPixel = (p0, p1) => p0.x === p1.x && p0.y === p1.y;
+export const isSameHeatmapRegion = (p0, p1) => p0.x === p1.x && p0.y === p1.y;
 export type ContourVertex = [ number, number ];
 export type Contour = ContourVertex[];
 export type Heatmap = number[][];
@@ -98,71 +100,121 @@ export function normalizePose(pose : Pose) : Pose {
   return pose;
 }
 
+
+
+/* 
+// returns all neighbors including diagonals
+* * *
+* ? *
+* * *
+*/
+export const neighborOffsets = [
+  [-1, -1], // top left
+  [0, -1], // top center
+  [1, -1], // top right
+  [1, 0], // center right
+  [1, 1], // bottom right
+  [0, 1], // bottom center
+  [-1, 1], // bottom left
+  [-1, 0] // center left
+];
+
+
+/*
+// returns only adjacent neigbhors
+  *
+* ? *
+  *  
+*/
+export const adjacentNeighborsOffsets = neighborOffsets.filter((_, i) => i % 2 === 1)
+
+/*
+// return corners around a region 
+*-*
+|?|
+*-*
+*/
+const edgeOffsets : Point[] = [
+  [0,0], // top left
+  [1,0], // top right
+  [1,1], // bottom right
+  [0,1] // bottom left
+];
+
+/*
+// returns the pair of vertex offsets representing the shared border between two adjacent regions
+// should look something like:
+[
+	[ [0,0], [1,0] ],
+	[ [1,0], [1,1] ],
+	[ [1, 1], [0,1] ],
+	[ [0,1], [0,0] ]
+]
+*/
+const adjacentSharedBorderOffsets : Point[][] = adjacentNeighborsOffsets.map(
+	(_, i) => edgeOffsets.concat([edgeOffsets[0]]).slice(i, i+2)
+);
+
+function getSharedVertices(r0:HeatmapRegion, rCompare:HeatmapRegion) : Point[] | void {
+	let i = 0;
+	const sharedVertices = []
+	for(const [dx, dy] of adjacentNeighborsOffsets){
+		const x = r0.x + dx;
+		const y = r0.y + dy;
+		// if comparison region matchies this adjacentNeighborOffset, 
+		// get the corresponding sharedBorderOffsets
+		if(x === rCompare.x && y === rCompare.y){
+			return adjacentSharedBorderOffsets[i]
+				.map(
+					([dx, dy]) => [r0.x+dx, r0.y+dy]
+				)
+		}
+		i += 1;
+	}
+}
+
 export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
   const width = heatmap[0].length;
   const height = heatmap.length;
-  const contours = [];
+  const contours = [];  
   let c = 0;
   let r = 0;  
 
-  const getPixelAt = memoize(
-    function getPixelAtFn(x : number, y : number) : HeatmapPixel | null {
+  const getRegionAt = memoize(
+    function getRegionAtFn(x : number, y : number) : HeatmapRegion {
       return {
         x,
         y,
+        coords: () => [x,y],
         score: heatmap[x] && typeof heatmap[x][y] === 'number'
           ? heatmap[x][y]
           : null
       };
     },
-    function getPixelAtResolver(x, y){
+    function getRegionAtResolver(x, y){
       return `${x},${y}`;
     }
   );
 
-  function isEdge(p : HeatmapPixel) : boolean {
+  function isEdge(p : HeatmapRegion) : boolean {
     // if this pixel is not empty and it has at least one empty neighbor 
     return !!p.score && !!adjacentNeighborsOffsets.find(([dx,dy]) => {
-      const n = getPixelAt(p.x+dx, p.y+dy);
+      const n = getRegionAt(p.x+dx, p.y+dy);
       return !n.score;
     });
   }
 
-  /* 
-  // returns all neighbors including diagonals
-  * * *
-  * ? *
-  * * *
-  */
-  const neighborOffsets = [
-    [-1, -1], // top left
-    [0, -1], // top center
-    [1, -1], // top right
-    [1, 0], // center right
-    [1, 1], // bottom right
-    [0, 1], // bottom center
-    [-1, 1], // bottom left
-    [-1, 0] // center left
-  ];
-
-  /*
-  // returns only adjacent neigbhors
-    *
-  * ? *
-    *  
-  */
-  const adjacentNeighborsOffsets = neighborOffsets.filter((_, i) => i % 2 === 1)
-
-  function getAdjacentNeighbors() : HeatmapPixel[] {
-    return adjacentNeighborsOffsets.map(([dx, dy]) => getPixelAt(c+dx, r+dy));
+  function getAdjacentNeighbors() : HeatmapRegion[] {
+    return adjacentNeighborsOffsets.map(([dx, dy]) => getRegionAt(c+dx, r+dy));
   }
 
   // try to get groups of contiguous pixels from an arbitrary array of pixels
-  function getContiguousPixels(pixels: HeatmapPixel[]) : HeatmapPixel[][] {
-    return pixels.reduce(
+	// TODO: might not need this function anymore
+  function getContiguousRegions(regions: HeatmapRegion[]) : HeatmapRegion[][] {
+    return regions.reduce(
       (acc, v, i, arr) => {        
         const group = [];
-        function hasBeenUsed(p : HeatmapPixel) : boolean {
+        function hasBeenUsed(p : HeatmapRegion) : boolean {
           // flatten all
           return !!acc.reduce(
             (_acc, v) => {
@@ -171,7 +223,7 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
             },
             []
           )
-          .find(_v => isSameHeatmapPixel(_v, p))
+          .find(_v => isSameHeatmapRegion(_v, p))
         };
 
         function getAdjacents(v){
@@ -196,38 +248,140 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
       []
     );
   }
-  
-  function getContourVertex(pixel: HeatmapPixel, emptyNeighbor: HeatmapPixel){
 
+  // this function determines a vertex for a given heatmap region and its neighbor
+  // and returns the verteces that 
+  function getContourVertex(region: HeatmapRegion, emptyNeighbor: HeatmapRegion) : ContourVertex[] {
+    // const edges = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+    const dx = emptyNeighbor.x - region.x;
+    const dy = emptyNeighbor.y - region.y;
   }
 
-
   while(r < height && c < width){
-    let p = getPixelAt(c, r);
+    let p : HeatmapRegion = getRegionAt(c, r);
+		
     if(isEdge(p)){
-      // found edge pixel, start tracing
+      // found edge pixel, start creating a contour object
+			const first = p;
       const contour = [];
-      const neighborGroups = getContiguousPixels(getAdjacentNeighbors());
 
-      const vPrev = contour[contour.length-1];
-      if(!contour[contour.length-1]){
-        neighborGroups[0][0]
+			let i = 0;
+
+			function getSharedVerticesForEmptyNeighbor(emptyNeighbor : HeatmapRegion, filter) : ContourVertex[] {
+				const diffVec = vectorDifference(emptyNeighbor.coords(), p.coords());
+				const [regionsVertices, emptyRegionVertices] = [p, emptyNeighbor]
+					.map(
+						region => edgeOffsets.map(([dx, dy]) => [region.x + dy, region.y + dy])
+					);
+				
+				const contourVertices = [];
+				// loop through all the corners of the current region 
+				// and see if they match any corners in the empty region
+				for(const [rx, ry] of regionsVertices){
+					let matchingVertex = emptyRegionVertices.find(([ex, ey]) => ex === rx && ey === ry);
+					if(matchingVertex){
+						contourVertices.push(matchingVertex);
+					}
+
+					if(contourVertices.length > 1){
+						break;
+					}
+				}
+				return contourVertices;
+			}
+
+			while(p && isEdge(p)){
+				if(!contour.length){
+					
+				}
+				else if(p === first) {
+					// we are back at the first edge region 
+					// make sure all vertices are accounted for
+				}
+
+
+
+
+				// reset p
+				i += 1;
+				p = getAdjacentNeighbors;
+			}
+
+      /* 
+      * start by creating the first two points by getting an empty neighbor
+      */
+      let availableEmptyNeighbors = getAdjacentNeighbors().filter(region => !region.score);
+      let emptyNeighbor : HeatmapRegion = availableEmptyNeighbors[0];
+      let emptyNeighborOffsets : [number, number] = null;
+
+      let i = 0;
+			// find an adjacent neighbor
+      for(const [dx, dy] of adjacentNeighborsOffsets){
+        const region = getRegionAt(c+dx, r+dy);
+        if(region && !region.score && !(region.contour === contour)){
+          emptyNeighborOffsets = [dx, dy];
+          emptyNeighbor = region;
+          break;
+        };
+        i += 1;
+      };
+
+      const initialPoints = edgeOffsets.concat(edgeOffsets).slice(i, i+2);
+      const diffVec = vectorDifference(p.coords(), emptyNeighbor.coords());
+
+      for(const initialPoint of initialPoints){
+        contour.push(
+          initialPoint[0] + diffVec[0] * (1 - p.score),
+          initialPoint[1] + diffVec[1] * (1 - p.score)
+        );
       }
 
+      // remove this empty neighbor now that it has been used
+      function removeEmptyNeighbor(){
+        availableEmptyNeighbors.splice(availableEmptyNeighbors.indexOf(emptyNeighbor));
+      }
+      removeEmptyNeighbor();
 
-      for(const neighbor of neighborGroups){
+      /* 
+      * now start tracing, finding the next empty neighbor 
+      * that is adjacent (or if not adjacent, diagonal) to the current empty neighbor (emptyNeighbor)
+      * if, none is found, try to find the next adjacent edge heatmap item (p)
+      */
 
+      function getNextNearestEmptyNeighbor() : HeatmapRegion {
+        const lastContour = contours[contours.length-1];
+        // try to find a neighbor that is touch
+        return availableEmptyNeighbors.find(
+          e => {
+            for(const [dx, dy] of edgeOffsets){
+              if(glVec2.dist([e.x + dx, e.y + dy], lastContour) < 1){
+                return true;
+              }
+            }
+          }
+        );
       }
 
+      while(true){
+        // see if there's another empty neighbor that's touching our current empty neighbor
+        emptyNeighbor = getNextNearestEmptyNeighbor();
+        if(!emptyNeighbor){
+          // move to the next edge region
+        }
+				else {
+
+				}
+				availableEmptyNeighbors.splice(availableEmptyNeighbors.indexOf(emptyNeighbor));
+        break;
+      }
 
       do {
         if(contour.length){
 
         }
-        const v = contour
         // look through neighbors to find one that is an edge and hasn't been used yet        
         pNext = neighborOffsets.find(([dx, dy]) => {
-          const _p = getPixelAt(c+dx, c+dy);
+          const _p = getRegionAt(c+dx, c+dy);
           return _p && !_p.isUsedInContour && isEdge(_p);
         });
         if(pNext){
