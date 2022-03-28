@@ -62,7 +62,9 @@ export type HeatmapRegion = {
   coords: () => [number, number];
   score: number;
   visited?: boolean;
-  contour?: Contour
+  finished?: boolean;
+  contour?: Contour;
+  usedEmptyNeighbors: HeatmapRegion[]
 }
 
 export const isSameHeatmapRegion = (p0, p1) => p0.x === p1.x && p0.y === p1.y;
@@ -141,38 +143,61 @@ const edgeOffsets : Point[] = [
   [0,1] // bottom left
 ];
 
-/*
-// returns the pair of vertex offsets representing the shared border between two adjacent regions
-// should look something like:
-[
-	[ [0,0], [1,0] ],
-	[ [1,0], [1,1] ],
-	[ [1, 1], [0,1] ],
-	[ [0,1], [0,0] ]
-]
-*/
-const adjacentSharedBorderOffsets : Point[][] = adjacentNeighborsOffsets.map(
-	(_, i) => edgeOffsets.concat([edgeOffsets[0]]).slice(i, i+2)
-);
-
-function getSharedVertices(r0:HeatmapRegion, rCompare:HeatmapRegion) : Point[] | void {
-	let i = 0;
-	const sharedVertices = []
-	for(const [dx, dy] of adjacentNeighborsOffsets){
-		const x = r0.x + dx;
-		const y = r0.y + dy;
-		// if comparison region matchies this adjacentNeighborOffset, 
-		// get the corresponding sharedBorderOffsets
-		if(x === rCompare.x && y === rCompare.y){
-			return adjacentSharedBorderOffsets[i]
-				.map(
-					([dx, dy]) => [r0.x+dx, r0.y+dy]
-				)
-		}
-		i += 1;
-	}
+function regionSharesPoint(region:HeatmapRegion, p:Point) : Point {
+  return edgeOffsets.find(
+    ([dx, dy]) => region.x + dx === p[0] && region.y + dy === p[1]
+  );
 }
 
+function getSharedVertices(r0:HeatmapRegion, r1:HeatmapRegion) : Point[] {
+  // find corners of r0
+  const corners0 : Point[] = edgeOffsets.map(([dx, dy]) => [r0.x + dx, r0.y + dy]);
+  const sharedVertices : Point[] = [];
+  for(const corner of corners0){
+    // iterate through all corners to see if they are shared with r2
+    if(regionSharesPoint(r1, corner)){
+      sharedVertices.push(corner);
+    }
+    if(sharedVertices.length > 1){
+      break;
+    }
+  }
+  return sharedVertices;
+}
+
+function getScoreAdjustedVertex(rEdge : HeatmapRegion, rEmpty : HeatmapRegion, vertex : Point) : Point {
+  const dx = rEdge.x - rEmpty.x;
+  const dy = rEdge.y - rEmpty.y;
+  const scoreAdjustmentFactor = Math.sqrt(1 - rEdge.score);
+  return [
+    vertex[0] + (dx * scoreAdjustmentFactor),
+    vertex[1] + (dy * scoreAdjustmentFactor)
+  ];
+}
+
+/*
+STRATEGY:
+scan entire heatmap
+when you find a region that is an edge (has a non-zero score and has 1 or more adjacent empty neighbors) and does not have a `contours` object
+	- take current edge region `currentEdgeRegion`
+	- create `contours` and `binaryContours` arrays
+	- for `currentEdgeRegion`
+		- assign `currentEdgeRegion.contours` to `contours`
+		- create an array of its `emptyAdjacentNeighbors`
+		- get `currentEmptyAdjacentNeighbor` which is the empty adjacent neighbor that shares a corner with most recent `binaryContours` (if none exists, just pick any of emptyAdjacentNeighbors)
+		- for `currentEmptyAdjacentNeighbor`
+			- get the two points where `currentEmptyAdjacentNeighbor` meet.  filter for points that are not equivalent to last `binaryContours` point
+				- if any filtered points are equivalent to the first `binaryContours` element, exit the entire loop
+				- add filtered points to `binaryContours`
+				- shift those same points based on the score value for `currentEdgeRegion` and add them to `contours`
+			- remove `currentEmptyAdjacentNeighbor` from `emptyAdjacentNeighbors`
+		- find next `currentEmptyAdjacentNeighbor`
+			- find an element in `emptyAdjacentNeighbors` that has a corner that matches the last element of `binaryContours`
+		- if `currentEmptyAdjacentNeighbor` is found then reenter loop above
+		- else find next `currentEdgeRegion`, look through all neighbors of `currentEdgeRegion` including diagonals and find one that has a corner that matches last element of `binaryContours`
+		- reenter `currentEdgeRegion` loop
+
+*/
 export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
   const width = heatmap[0].length;
   const height = heatmap.length;
@@ -188,7 +213,8 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
         coords: () => [x,y],
         score: heatmap[x] && typeof heatmap[x][y] === 'number'
           ? heatmap[x][y]
-          : null
+          : null,
+        usedEmptyNeighbors: []
       };
     },
     function getRegionAtResolver(x, y){
@@ -196,7 +222,7 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
     }
   );
 
-  function isEdge(p : HeatmapRegion) : boolean {
+  function isContourEdgeRegion(p : HeatmapRegion) : boolean {
     // if this pixel is not empty and it has at least one empty neighbor 
     return !!p.score && !!adjacentNeighborsOffsets.find(([dx,dy]) => {
       const n = getRegionAt(p.x+dx, p.y+dy);
@@ -204,193 +230,77 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
     });
   }
 
-  function getAdjacentNeighbors() : HeatmapRegion[] {
-    return adjacentNeighborsOffsets.map(([dx, dy]) => getRegionAt(c+dx, r+dy));
+  function getAdjacentNeighbors(region) : HeatmapRegion[] {
+    return adjacentNeighborsOffsets.map(([dx, dy]) => getRegionAt(region.x+dx, region.y+dy));
   }
 
-  // try to get groups of contiguous pixels from an arbitrary array of pixels
-	// TODO: might not need this function anymore
-  function getContiguousRegions(regions: HeatmapRegion[]) : HeatmapRegion[][] {
-    return regions.reduce(
-      (acc, v, i, arr) => {        
-        const group = [];
-        function hasBeenUsed(p : HeatmapRegion) : boolean {
-          // flatten all
-          return !!acc.reduce(
-            (_acc, v) => {
-              _acc = _acc.concat(v);
-              return _acc;
-            },
-            []
-          )
-          .find(_v => isSameHeatmapRegion(_v, p))
-        };
-
-        function getAdjacents(v){
-          return arr.filter(p => (p.x === v.x && Math.abs(p.y - v.y) === 1) || (p.y === v.y && Math.abs(p.x - v.x) === 1));
-        };
-
-        function iterate(item){
-          if(!hasBeenUsed(item)){
-            group.push(item);
-            for(const adjacent of getAdjacents(item)){
-              iterate(adjacent)
-            }            
-          }
-        };
-        iterate(v);
-
-        if(group.length){
-          acc.push(group);
-        }
-        return acc;
-      },
-      []
-    );
-  }
-
-  // this function determines a vertex for a given heatmap region and its neighbor
-  // and returns the verteces that 
-  function getContourVertex(region: HeatmapRegion, emptyNeighbor: HeatmapRegion) : ContourVertex[] {
-    // const edges = [[0, -1], [1, 0], [0, 1], [-1, 0]];
-    const dx = emptyNeighbor.x - region.x;
-    const dy = emptyNeighbor.y - region.y;
+  function getNextEdgeRegion(currentEdgeRegion : HeatmapRegion, lastBinaryContourVertex: Point) : HeatmapRegion | void {
+    for(const [dx, dy] of neighborOffsets){
+      const neighbor = getRegionAt(currentEdgeRegion.x + dx, currentEdgeRegion.y + dy);
+      if(isContourEdgeRegion(neighbor) && regionSharesPoint(neighbor, lastBinaryContourVertex)){
+        return neighbor;
+      }
+    }
   }
 
   while(r < height && c < width){
     let p : HeatmapRegion = getRegionAt(c, r);
-		
-    if(isEdge(p)){
-      // found edge pixel, start creating a contour object
-			const first = p;
-      const contour = [];
 
-			let i = 0;
-
-			function getSharedVerticesForEmptyNeighbor(emptyNeighbor : HeatmapRegion, filter) : ContourVertex[] {
-				const diffVec = vectorDifference(emptyNeighbor.coords(), p.coords());
-				const [regionsVertices, emptyRegionVertices] = [p, emptyNeighbor]
-					.map(
-						region => edgeOffsets.map(([dx, dy]) => [region.x + dy, region.y + dy])
-					);
-				
-				const contourVertices = [];
-				// loop through all the corners of the current region 
-				// and see if they match any corners in the empty region
-				for(const [rx, ry] of regionsVertices){
-					let matchingVertex = emptyRegionVertices.find(([ex, ey]) => ex === rx && ey === ry);
-					if(matchingVertex){
-						contourVertices.push(matchingVertex);
-					}
-
-					if(contourVertices.length > 1){
-						break;
-					}
-				}
-				return contourVertices;
-			}
-
-			while(p && isEdge(p)){
-				if(!contour.length){
-					
-				}
-				else if(p === first) {
-					// we are back at the first edge region 
-					// make sure all vertices are accounted for
-				}
-
-
-
-
-				// reset p
-				i += 1;
-				p = getAdjacentNeighbors;
-			}
-
-      /* 
-      * start by creating the first two points by getting an empty neighbor
-      */
-      let availableEmptyNeighbors = getAdjacentNeighbors().filter(region => !region.score);
-      let emptyNeighbor : HeatmapRegion = availableEmptyNeighbors[0];
-      let emptyNeighborOffsets : [number, number] = null;
-
-      let i = 0;
-			// find an adjacent neighbor
-      for(const [dx, dy] of adjacentNeighborsOffsets){
-        const region = getRegionAt(c+dx, r+dy);
-        if(region && !region.score && !(region.contour === contour)){
-          emptyNeighborOffsets = [dx, dy];
-          emptyNeighbor = region;
-          break;
-        };
-        i += 1;
-      };
-
-      const initialPoints = edgeOffsets.concat(edgeOffsets).slice(i, i+2);
-      const diffVec = vectorDifference(p.coords(), emptyNeighbor.coords());
-
-      for(const initialPoint of initialPoints){
-        contour.push(
-          initialPoint[0] + diffVec[0] * (1 - p.score),
-          initialPoint[1] + diffVec[1] * (1 - p.score)
-        );
+    if(isContourEdgeRegion(p) && !p.finished){
+      // found edge pixel, start creating a contour array
+      let contour = [];
+			let binaryContour = [];
+			let currentEdgeRegion : HeatmapRegion | null = p;
+      function getLastBinaryContourVertex() : Point | undefined {
+        return binaryContour[binaryContour.length - 1]
       }
 
-      // remove this empty neighbor now that it has been used
-      function removeEmptyNeighbor(){
-        availableEmptyNeighbors.splice(availableEmptyNeighbors.indexOf(emptyNeighbor));
-      }
-      removeEmptyNeighbor();
+			while(currentEdgeRegion){
+				currentEdgeRegion.contour = contour;
+        currentEdgeRegion.visited = true;
+				let emptyNeighbors : HeatmapRegion[] = getAdjacentNeighbors(currentEdgeRegion)
+          .filter(region => !region.score && currentEdgeRegion.usedEmptyNeighbors.indexOf(region) === -1);
 
-      /* 
-      * now start tracing, finding the next empty neighbor 
-      * that is adjacent (or if not adjacent, diagonal) to the current empty neighbor (emptyNeighbor)
-      * if, none is found, try to find the next adjacent edge heatmap item (p)
-      */
+				function findNextEmptyNeighbor(){
+          // if nothing has been added to the contour, just take the first empty neighbor and go with that
+					if(!binaryContour.length){
+						return emptyNeighbors[0];
+					}
+					return emptyNeighbors.find(emptyNeighbor => regionSharesPoint(emptyNeighbor, binaryContour[binaryContour.length-1]));
+				}
 
-      function getNextNearestEmptyNeighbor() : HeatmapRegion {
-        const lastContour = contours[contours.length-1];
-        // try to find a neighbor that is touch
-        return availableEmptyNeighbors.find(
-          e => {
-            for(const [dx, dy] of edgeOffsets){
-              if(glVec2.dist([e.x + dx, e.y + dy], lastContour) < 1){
-                return true;
+        let currentEmptyNeighbor = findNextEmptyNeighbor();
+				while(currentEmptyNeighbor){
+          let lastBinaryContourVertex = getLastBinaryContourVertex();
+          let sharedBinaryVertices = getSharedVertices(currentEdgeRegion, currentEmptyNeighbor)
+            .filter(
+              ([vx, vy]) => {
+                return !lastBinaryContourVertex || !(vx === lastBinaryContourVertex[0] && vy === lastBinaryContourVertex[1])
               }
-            }
-          }
-        );
-      }
-
-      while(true){
-        // see if there's another empty neighbor that's touching our current empty neighbor
-        emptyNeighbor = getNextNearestEmptyNeighbor();
-        if(!emptyNeighbor){
-          // move to the next edge region
-        }
-				else {
-
+            );
+          binaryContour = binaryContour.concat(sharedBinaryVertices);
+          contour = contour.concat(
+            sharedBinaryVertices.map(sharedBinaryVertex => getScoreAdjustedVertex(currentEdgeRegion, currentEmptyNeighbor, sharedBinaryVertex))
+          );
+          // now that we have used this currentEmptyNeighbor, remove it from the emptyNeighbors array
+          emptyNeighbors.splice(emptyNeighbors.indexOf(currentEmptyNeighbor))
+          currentEdgeRegion.usedEmptyNeighbors.push(currentEmptyNeighbor);
+          currentEmptyNeighbor = findNextEmptyNeighbor();
 				}
-				availableEmptyNeighbors.splice(availableEmptyNeighbors.indexOf(emptyNeighbor));
-        break;
-      }
 
-      do {
-        if(contour.length){
+        // important, this checks to see if all empty neighbors have been used up
+        // if so, this region is marked as finished, which tells the loop to skip it when encountered again
+        currentEdgeRegion.finished = emptyNeighbors.length === 0;
 
+        // no more contiguous empty neighbors, try to find a new edge region
+        const nextEdge = getNextEdgeRegion(currentEdgeRegion, getLastBinaryContourVertex());
+        if(nextEdge){
+          currentEdgeRegion = nextEdge;
         }
-        // look through neighbors to find one that is an edge and hasn't been used yet        
-        pNext = neighborOffsets.find(([dx, dy]) => {
-          const _p = getRegionAt(c+dx, c+dy);
-          return _p && !_p.isUsedInContour && isEdge(_p);
-        });
-        if(pNext){
-          // continue building contour          
-          pNext.isContour = true;
-        }
-      } while(pNext);
-      contours.push(contour);
-    }
+			}
+
+
+
 
     // iterate
     c += 1;
