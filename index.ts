@@ -1,11 +1,12 @@
 import 'dotenv';
+import fs from 'fs';
 import cluster from 'cluster';
 import ws from 'ws';
 import { exec } from 'child_process';
 import os = require('os');
-import { getPersonGroups, normalizeContours, normalizePose, Pose, PersonGroup, processIncomingFrame } from './util/trace';
-import ndArrayPack from 'ndarray-pack';
-import contour2d from 'contour-2d';
+import { getPersonGroups, normalizeContours, normalizePose, Pose, PersonGroup, processIncomingFrame, convertHeatmapToContours } from './util/trace';
+// import ndArrayPack from 'ndarray-pack';
+// import contour2d from 'contour-2d';
 
 const { WEBSOCKET_PORT=8080 } = process.env;
 
@@ -56,27 +57,40 @@ export function startWebsocketServer(){
     });
 
   });
+  let i = 0;
   wss.on('connection', function connection(client) {    
+    console.log('connected');
     client.on('message', function incoming(message) {
       try {
         const now = Date.now();
         now;
+        fs.writeFileSync(`temp/frames/frame-${i.toString().padStart(4, '0')}.json`, message);
+        i += 1;
+        return;
+
+
         let {
-          heatmap: bitmap,
+          heatmap,
           poses
         } : { heatmap: any, poses: Pose[]} = JSON.parse(message);
-        const width = bitmap[0].length;
-        const height = bitmap.length;
+        const width = heatmap[0].length;
+        const height = heatmap.length;
+
         
         poses = poses.map(normalizePose);
+
+        const contours = normalizeContours(
+          convertHeatmapToContours(heatmap), 
+          { width, height }
+        );
                 
-        const contours = normalizeContours(contour2d(ndArrayPack(
-          bitmap.map(
-            r => r.map(
-              p => p >= 1 ? 1 : 0
-            )
-          )
-        )), { width, height });
+        // const contours = normalizeContours(contour2d(ndArrayPack(
+        //   bitmap.map(
+        //     r => r.map(
+        //       p => p >= 1 ? 1 : 0
+        //     )
+        //   )
+        // )), { width, height });
         
         const personGroups : PersonGroup[] = getPersonGroups(contours, poses);
         const frame = processIncomingFrame({

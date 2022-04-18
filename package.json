@@ -14,7 +14,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start-dev": "ts-node index.ts",
     "dev-backend": "nodemon index.ts",
-    "dev-frontend": "parcel"
+    "dev-frontend": "parcel",
+    "debug-tracer": "ts-node scripts/trace-test.ts"
   },
   "repository": {
     "type": "git",

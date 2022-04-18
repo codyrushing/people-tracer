@@ -1,6 +1,6 @@
 import pointInPolygon from 'point-in-polygon';
 import glVec2 from 'gl-vec2';
-import { createVector, vectorDifference } from './vector';
+import { vectorDifference } from './vector';
 import { memoize } from 'lodash';
 
 export const KEYPOINTS = [
@@ -64,6 +64,7 @@ export type HeatmapRegion = {
   visited?: boolean;
   finished?: boolean;
   contour?: Contour;
+  usedBinaryVerteces?: Point[];
   usedEmptyNeighbors: HeatmapRegion[]
 }
 
@@ -186,7 +187,7 @@ when you find a region that is an edge (has a non-zero score and has 1 or more a
 		- create an array of its `emptyAdjacentNeighbors`
 		- get `currentEmptyAdjacentNeighbor` which is the empty adjacent neighbor that shares a corner with most recent `binaryContours` (if none exists, just pick any of emptyAdjacentNeighbors)
 		- for `currentEmptyAdjacentNeighbor`
-			- get the two points where `currentEmptyAdjacentNeighbor` meet.  filter for points that are not equivalent to last `binaryContours` point
+			- get the two points where `currentEmptyAdjacentNeighbor` and `currentEdgeRegions` meet.  filter for points that are not equivalent to last `binaryContours` point
 				- if any filtered points are equivalent to the first `binaryContours` element, exit the entire loop
 				- add filtered points to `binaryContours`
 				- shift those same points based on the score value for `currentEdgeRegion` and add them to `contours`
@@ -214,6 +215,7 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
         score: heatmap[x] && typeof heatmap[x][y] === 'number'
           ? heatmap[x][y]
           : null,
+        usedBinaryVerteces: [],
         usedEmptyNeighbors: []
       };
     },
@@ -234,13 +236,26 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
     return adjacentNeighborsOffsets.map(([dx, dy]) => getRegionAt(region.x+dx, region.y+dy));
   }
 
-  function getNextEdgeRegion(currentEdgeRegion : HeatmapRegion, lastBinaryContourVertex: Point) : HeatmapRegion | void {
+  function getNextEdgeRegion(currentEdgeRegion : HeatmapRegion, lastBinaryContourVertex: Point) : HeatmapRegion | undefined {
+    // look for all neighbors, including diagonals, and find one that shares the previous contour point
     for(const [dx, dy] of neighborOffsets){
       const neighbor = getRegionAt(currentEdgeRegion.x + dx, currentEdgeRegion.y + dy);
-      if(isContourEdgeRegion(neighbor) && regionSharesPoint(neighbor, lastBinaryContourVertex)){
+      if(
+        !neighbor.finished 
+        && 
+        isContourEdgeRegion(neighbor) 
+        && 
+        // it is connected to our previous binary contour
+        regionSharesPoint(neighbor, lastBinaryContourVertex) 
+        && 
+        // it hasn't already used that binary contour
+        !neighbor.usedBinaryVerteces.find(([x, y]) => lastBinaryContourVertex[0] === x && lastBinaryContourVertex[1] === y)
+      ){
         return neighbor;
       }
+      continue;
     }
+    return undefined;
   }
 
   while(r < height && c < width){
@@ -249,8 +264,9 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
     if(isContourEdgeRegion(p) && !p.finished){
       // found edge pixel, start creating a contour array
       let contour = [];
+      contours.push(contour);
 			let binaryContour = [];
-			let currentEdgeRegion : HeatmapRegion | null = p;
+			let currentEdgeRegion = p;
       function getLastBinaryContourVertex() : Point | undefined {
         return binaryContour[binaryContour.length - 1]
       }
@@ -273,6 +289,7 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
 				while(currentEmptyNeighbor){
           let lastBinaryContourVertex = getLastBinaryContourVertex();
           let sharedBinaryVertices = getSharedVertices(currentEdgeRegion, currentEmptyNeighbor)
+            // filter for only new shared vertices
             .filter(
               ([vx, vy]) => {
                 return !lastBinaryContourVertex || !(vx === lastBinaryContourVertex[0] && vy === lastBinaryContourVertex[1])
@@ -283,7 +300,14 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
             sharedBinaryVertices.map(sharedBinaryVertex => getScoreAdjustedVertex(currentEdgeRegion, currentEmptyNeighbor, sharedBinaryVertex))
           );
           // now that we have used this currentEmptyNeighbor, remove it from the emptyNeighbors array
-          emptyNeighbors.splice(emptyNeighbors.indexOf(currentEmptyNeighbor))
+          emptyNeighbors.splice(emptyNeighbors.indexOf(currentEmptyNeighbor));
+          // add reference to shared binary verteces onto region
+          currentEdgeRegion.usedBinaryVerteces = currentEdgeRegion.usedBinaryVerteces.concat(
+            sharedBinaryVertices.filter(
+              ([x, y]) => !currentEdgeRegion.usedBinaryVerteces.find(v => v[0] === x && v[1] === y)
+            )
+          );
+          // add empty neighbor to the used list
           currentEdgeRegion.usedEmptyNeighbors.push(currentEmptyNeighbor);
           currentEmptyNeighbor = findNextEmptyNeighbor();
 				}
@@ -293,15 +317,9 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
         currentEdgeRegion.finished = emptyNeighbors.length === 0;
 
         // no more contiguous empty neighbors, try to find a new edge region
-        const nextEdge = getNextEdgeRegion(currentEdgeRegion, getLastBinaryContourVertex());
-        if(nextEdge){
-          currentEdgeRegion = nextEdge;
-        }
+        currentEdgeRegion = getNextEdgeRegion(currentEdgeRegion, getLastBinaryContourVertex());
 			}
-
-
-
-
+    }
     // iterate
     c += 1;
     if(c >= width){
@@ -309,6 +327,30 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
       r += 1;
     }
   }
+
+  // post process contours
+  for(let contour of contours){
+    contour = contour.reduce(
+      (acc, v, i, arr) => {
+        const prev = arr[i-1];
+        if(
+          prev 
+          && 
+          glVec2.distance(vectorDifference(prev, v)) < 0.5
+        ){
+          acc[i-1] = [
+            (prev[0] + v[0])/2,
+            (prev[1] + v[1])/2
+          ];
+        } else {
+          acc.push(v);
+        }
+        return acc;
+      },
+      []
+    );
+  }
+
   return contours;
 }
 
