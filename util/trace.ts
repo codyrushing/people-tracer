@@ -103,8 +103,6 @@ export function normalizePose(pose : Pose) : Pose {
   return pose;
 }
 
-
-
 /* 
 // returns all neighbors including diagonals
 * * *
@@ -166,15 +164,26 @@ function getSharedVertices(r0:HeatmapRegion, r1:HeatmapRegion) : Point[] {
   return sharedVertices;
 }
 
+function clamp(val:number, min:number, max:number){
+  return Math.min(
+    Math.max(min, val),
+    max
+  );
+}
+
 function getScoreAdjustedVertex(rEdge : HeatmapRegion, rEmpty : HeatmapRegion, vertex : Point) : Point {
   const dx = rEdge.x - rEmpty.x;
   const dy = rEdge.y - rEmpty.y;
   const scoreAdjustmentFactor = Math.sqrt(1 - rEdge.score);
   return [
-    vertex[0] + (dx * scoreAdjustmentFactor),
-    vertex[1] + (dy * scoreAdjustmentFactor)
+    clamp(vertex[0] + (dx * scoreAdjustmentFactor), 0, 1),
+    clamp(vertex[1] + (dy * scoreAdjustmentFactor), 0, 1)
   ];
 }
+
+// function addPointToContourIfNew(contour: Contour, p : Point){
+  
+// }
 
 /*
 STRATEGY:
@@ -264,7 +273,6 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
     if(isContourEdgeRegion(p) && !p.finished){
       // found edge pixel, start creating a contour array
       let contour = [];
-      contours.push(contour);
 			let binaryContour = [];
 			let currentEdgeRegion = p;
       function getLastBinaryContourVertex() : Point | undefined {
@@ -295,18 +303,19 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
                 return !lastBinaryContourVertex || !(vx === lastBinaryContourVertex[0] && vy === lastBinaryContourVertex[1])
               }
             );
+          // add binary vertices to binary contour
           binaryContour = binaryContour.concat(sharedBinaryVertices);
+          // add to adjusted vertices to contour
           contour = contour.concat(
             sharedBinaryVertices.map(sharedBinaryVertex => getScoreAdjustedVertex(currentEdgeRegion, currentEmptyNeighbor, sharedBinaryVertex))
           );
           // now that we have used this currentEmptyNeighbor, remove it from the emptyNeighbors array
           emptyNeighbors.splice(emptyNeighbors.indexOf(currentEmptyNeighbor));
-          // add reference to shared binary verteces onto region
-          currentEdgeRegion.usedBinaryVerteces = currentEdgeRegion.usedBinaryVerteces.concat(
-            sharedBinaryVertices.filter(
-              ([x, y]) => !currentEdgeRegion.usedBinaryVerteces.find(v => v[0] === x && v[1] === y)
-            )
+          // add reference to shared binary vertices onto region
+          const uniqueSharedVertices = sharedBinaryVertices.filter(
+            ([x, y]) => !currentEdgeRegion.usedBinaryVerteces.find(v => v[0] === x && v[1] === y)
           );
+          currentEdgeRegion.usedBinaryVerteces = currentEdgeRegion.usedBinaryVerteces.concat(uniqueSharedVertices);
           // add empty neighbor to the used list
           currentEdgeRegion.usedEmptyNeighbors.push(currentEmptyNeighbor);
           currentEmptyNeighbor = findNextEmptyNeighbor();
@@ -319,6 +328,7 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
         // no more contiguous empty neighbors, try to find a new edge region
         currentEdgeRegion = getNextEdgeRegion(currentEdgeRegion, getLastBinaryContourVertex());
 			}
+      contours.push(contour);
     }
     // iterate
     c += 1;
@@ -329,6 +339,7 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
   }
 
   // post process contours
+  // TODO remove contiguous points that have the same slope
   for(let contour of contours){
     contour = contour.reduce(
       (acc, v, i, arr) => {
@@ -336,7 +347,7 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
         if(
           prev 
           && 
-          glVec2.distance(vectorDifference(prev, v)) < 0.5
+          glVec2.len(vectorDifference(prev, v)) < 0.5
         ){
           acc[i-1] = [
             (prev[0] + v[0])/2,

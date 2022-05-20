@@ -1,5 +1,5 @@
 import 'dotenv';
-import fs from 'fs';
+// import fs from 'fs';
 import cluster from 'cluster';
 import ws from 'ws';
 import { exec } from 'child_process';
@@ -57,17 +57,14 @@ export function startWebsocketServer(){
     });
 
   });
-  let i = 0;
+  // let i = 0;
   wss.on('connection', function connection(client) {    
     console.log('connected');
     client.on('message', function incoming(message) {
       try {
-        const now = Date.now();
-        now;
-        fs.writeFileSync(`temp/frames/frame-${i.toString().padStart(4, '0')}.json`, message);
-        i += 1;
-        return;
-
+        // fs.writeFileSync(`temp/frames/frame-${i.toString().padStart(4, '0')}.json`, message);
+        // i += 1;
+        // return;
 
         let {
           heatmap,
@@ -75,8 +72,7 @@ export function startWebsocketServer(){
         } : { heatmap: any, poses: Pose[]} = JSON.parse(message);
         const width = heatmap[0].length;
         const height = heatmap.length;
-
-        
+ 
         poses = poses.map(normalizePose);
 
         const contours = normalizeContours(
