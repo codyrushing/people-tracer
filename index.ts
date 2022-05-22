@@ -1,5 +1,5 @@
 import 'dotenv';
-// import fs from 'fs';
+import fs from 'fs';
 import cluster from 'cluster';
 import ws from 'ws';
 import { exec } from 'child_process';
@@ -8,7 +8,7 @@ import { getPersonGroups, normalizeContours, normalizePose, Pose, PersonGroup, p
 // import ndArrayPack from 'ndarray-pack';
 // import contour2d from 'contour-2d';
 
-const { WEBSOCKET_PORT=8080 } = process.env;
+const { WEBSOCKET_PORT=8080, SAVE_FRAMES_TO_DISK } = process.env;
 
 const numCPUs = os.cpus().length;
 
@@ -57,11 +57,14 @@ export function startWebsocketServer(){
     });
 
   });
-  // let i = 0;
+  let i = 0;
   wss.on('connection', function connection(client) {    
-    console.log('connected');
     client.on('message', function incoming(message) {
       try {
+        if(SAVE_FRAMES_TO_DISK){
+          fs.writeFileSync(`temp/frames/frame-${i.toString().padStart(4, '0')}.json`, message);
+          i += 1;
+        }
         // fs.writeFileSync(`temp/frames/frame-${i.toString().padStart(4, '0')}.json`, message);
         // i += 1;
         // return;

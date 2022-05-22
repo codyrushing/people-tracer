@@ -122,7 +122,7 @@ async function run(){
         g.lineStyle(2, 0xffd900, 1);
 
         let i = 0;
-        for(const [x,y] of personGroup.contour){
+        for(const [x,y] of personGroup.contour.slice(0, personGroup.contour.length-6)){
           if(i === 0){
             g.moveTo(x * width, y * height);
           }

@@ -164,20 +164,20 @@ function getSharedVertices(r0:HeatmapRegion, r1:HeatmapRegion) : Point[] {
   return sharedVertices;
 }
 
-function clamp(val:number, min:number, max:number){
-  return Math.min(
-    Math.max(min, val),
-    max
-  );
-}
+// function clamp(val:number, min:number, max:number){
+//   return Math.min(
+//     Math.max(min, val),
+//     max
+//   );
+// }
 
 function getScoreAdjustedVertex(rEdge : HeatmapRegion, rEmpty : HeatmapRegion, vertex : Point) : Point {
   const dx = rEdge.x - rEmpty.x;
   const dy = rEdge.y - rEmpty.y;
   const scoreAdjustmentFactor = Math.sqrt(1 - rEdge.score);
   return [
-    clamp(vertex[0] + (dx * scoreAdjustmentFactor), 0, 1),
-    clamp(vertex[1] + (dy * scoreAdjustmentFactor), 0, 1)
+    vertex[0] + (dx * scoreAdjustmentFactor),
+    vertex[1] + (dy * scoreAdjustmentFactor)
   ];
 }
 
@@ -221,8 +221,8 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
         x,
         y,
         coords: () => [x,y],
-        score: heatmap[x] && typeof heatmap[x][y] === 'number'
-          ? heatmap[x][y]
+        score: heatmap[y] && typeof heatmap[y][x] === 'number'
+          ? heatmap[y][x]
           : null,
         usedBinaryVerteces: [],
         usedEmptyNeighbors: []
@@ -310,7 +310,7 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
             sharedBinaryVertices.map(sharedBinaryVertex => getScoreAdjustedVertex(currentEdgeRegion, currentEmptyNeighbor, sharedBinaryVertex))
           );
           // now that we have used this currentEmptyNeighbor, remove it from the emptyNeighbors array
-          emptyNeighbors.splice(emptyNeighbors.indexOf(currentEmptyNeighbor));
+          emptyNeighbors.splice(emptyNeighbors.indexOf(currentEmptyNeighbor), 1);
           // add reference to shared binary vertices onto region
           const uniqueSharedVertices = sharedBinaryVertices.filter(
             ([x, y]) => !currentEdgeRegion.usedBinaryVerteces.find(v => v[0] === x && v[1] === y)
