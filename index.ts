@@ -1,5 +1,5 @@
-import 'dotenv';
-import fs from 'fs';
+import 'dotenv/config';
+import fs from 'fs/promises';
 import cluster from 'cluster';
 import ws from 'ws';
 import { exec } from 'child_process';
@@ -57,17 +57,13 @@ export function startWebsocketServer(){
     });
 
   });
-  let i = 0;
+
   wss.on('connection', function connection(client) {    
     client.on('message', function incoming(message) {
       try {
-        if(SAVE_FRAMES_TO_DISK){
-          fs.writeFileSync(`temp/frames/frame-${i.toString().padStart(4, '0')}.json`, message);
-          i += 1;
+        if(SAVE_FRAMES_TO_DISK){    
+          fs.writeFile(`temp/frames/frame.${Date.now()}.json`, message);
         }
-        // fs.writeFileSync(`temp/frames/frame-${i.toString().padStart(4, '0')}.json`, message);
-        // i += 1;
-        // return;
 
         let {
           heatmap,
@@ -82,14 +78,6 @@ export function startWebsocketServer(){
           convertHeatmapToContours(heatmap), 
           { width, height }
         );
-                
-        // const contours = normalizeContours(contour2d(ndArrayPack(
-        //   bitmap.map(
-        //     r => r.map(
-        //       p => p >= 1 ? 1 : 0
-        //     )
-        //   )
-        // )), { width, height });
         
         const personGroups : PersonGroup[] = getPersonGroups(contours, poses);
         const frame = processIncomingFrame({

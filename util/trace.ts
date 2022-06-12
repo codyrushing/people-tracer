@@ -1,7 +1,7 @@
 import pointInPolygon from 'point-in-polygon';
 import glVec2 from 'gl-vec2';
-import { vectorDifference } from './vector';
 import { memoize } from 'lodash';
+// import { vectorDifference } from './vector';
 
 export const KEYPOINTS = [
   'nose',
@@ -171,19 +171,26 @@ function getSharedVertices(r0:HeatmapRegion, r1:HeatmapRegion) : Point[] {
 //   );
 // }
 
-function getScoreAdjustedVertex(rEdge : HeatmapRegion, rEmpty : HeatmapRegion, vertex : Point) : Point {
+interface ScoreAdjustedVertexParams {
+  rEdge: HeatmapRegion;
+  rEmpty: HeatmapRegion;
+  vertex: Point;
+}
+function getScoreAdjustedVertex({ rEdge, rEmpty, vertex } : ScoreAdjustedVertexParams) : Point {
+  let { score } = rEdge;
   const dx = rEdge.x - rEmpty.x;
   const dy = rEdge.y - rEmpty.y;
-  const scoreAdjustmentFactor = Math.sqrt(1 - rEdge.score);
+
+  const scoreAdjustmentFactor = Math.sqrt(1 - score);
   return [
     vertex[0] + (dx * scoreAdjustmentFactor),
     vertex[1] + (dy * scoreAdjustmentFactor)
   ];
 }
 
-// function addPointToContourIfNew(contour: Contour, p : Point){
-  
-// }
+function getSlope(p0:Point, p1:Point) : number {
+  return (p1[1] - p0[1])/(p1[0] - p0[0]);
+}
 
 /*
 STRATEGY:
@@ -211,7 +218,7 @@ when you find a region that is an edge (has a non-zero score and has 1 or more a
 export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
   const width = heatmap[0].length;
   const height = heatmap.length;
-  const contours = [];  
+  let contours = [];  
   let c = 0;
   let r = 0;  
 
@@ -304,10 +311,19 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
               }
             );
           // add binary vertices to binary contour
-          binaryContour = binaryContour.concat(sharedBinaryVertices);
+          binaryContour = binaryContour.concat(
+            sharedBinaryVertices
+              // .filter(
+              //   ([vx, vy]) => !lastBinaryContourVertex || lastBinaryContourVertex[0] !== vx || lastBinaryContourVertex[1] !== vy
+              // )
+          );
           // add to adjusted vertices to contour
           contour = contour.concat(
-            sharedBinaryVertices.map(sharedBinaryVertex => getScoreAdjustedVertex(currentEdgeRegion, currentEmptyNeighbor, sharedBinaryVertex))
+            sharedBinaryVertices.map(sharedBinaryVertex => getScoreAdjustedVertex({
+              rEdge: currentEdgeRegion, 
+              rEmpty: currentEmptyNeighbor, 
+              vertex: sharedBinaryVertex
+            }))
           );
           // now that we have used this currentEmptyNeighbor, remove it from the emptyNeighbors array
           emptyNeighbors.splice(emptyNeighbors.indexOf(currentEmptyNeighbor), 1);
@@ -340,27 +356,49 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
 
   // post process contours
   // TODO remove contiguous points that have the same slope
-  for(let contour of contours){
-    contour = contour.reduce(
-      (acc, v, i, arr) => {
-        const prev = arr[i-1];
-        if(
-          prev 
-          && 
-          glVec2.len(vectorDifference(prev, v)) < 0.5
-        ){
-          acc[i-1] = [
-            (prev[0] + v[0])/2,
-            (prev[1] + v[1])/2
-          ];
-        } else {
+  contours = contours.map(
+    c => {
+      // c = c.reduce(
+      //   (acc, v, i, arr) => {
+      //     const prev = arr[i-1];
+      //     if(
+      //       prev
+      //       &&
+      //       glVec2.len(vectorDifference(v, prev)) < 1
+      //     ){
+      //       acc.pop();
+      //       acc.push([
+      //         (v[0]+prev[0])/2,
+      //         (v[1]+prev[1])/2
+      //       ])
+      //     }
+      //     else {
+      //       acc.push(v);
+      //     }
+      //     return acc;
+      //   },
+      //   []
+      // );
+
+      c = c.reduce(
+        (acc, v, i, arr) => {
+          const prev1 = arr[i-1];
+          const prev2 = arr[i-2];
+          if(
+            i < arr.length-3 &&
+            prev1 && prev2 &&
+            getSlope(prev2, prev1) === getSlope(prev1, v)
+          ){
+            acc.pop();
+          } 
           acc.push(v);
-        }
-        return acc;
-      },
-      []
-    );
-  }
+          return acc;
+        },
+        []
+      );
+      return c;
+    }
+  );
 
   return contours;
 }
