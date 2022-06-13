@@ -1,37 +1,49 @@
 import 'dotenv/config';
 import cluster from 'cluster';
-import ws from 'ws';
 import os = require('os');
 import { startRemoteBodypix, processIncomingMessage } from './lib/bodypix';
+import { startChannel, startAppChannel, broadcastToAllListeners } from './lib/websocket';
 
-const { WEBSOCKET_PORT=8080 } = process.env;
+const { FRAMES_WEBSOCKET_PORT=8080 } = process.env;
 const numCPUs = os.cpus().length;
 
+/*
+// there are two different websocket servers (channels)
+1. One for the Coral boards publish raw frames
+2. One for the 
+*/
+
 const USE_MULTI_PROCESS = false;
-export async function startWebsocketServer(){
+export async function startWebsocketServers(){
   // WORKER
-  const wss = new ws.Server({ port: WEBSOCKET_PORT });
-  wss.on('error', console.error);
-  wss.on('listening', startRemoteBodypix);
-  wss.on('connection', function websocketConnection(client) {    
-    client.on('message', async function incomingWebsocketMessage(message) {
+  const framesChannel = startChannel(Number(FRAMES_WEBSOCKET_PORT));
+  const appChannel = startAppChannel();
+
+  framesChannel.on('error', console.error);
+  framesChannel.on('listening', startRemoteBodypix);
+  framesChannel.on('connection', function framesWebsocketConnection(client){    
+    client.on('message', async function incomingFramesWebsocketMessage(message){
       try {
-        const frame = await processIncomingMessage(message);
-        wss.clients.forEach(function each(client) {
-          if (client.readyState === ws.OPEN) {
-            client.send(JSON.stringify({
-              type: 'frame',
-              payload: frame
-            }));
-          }
-        });
+        // process the frame
+        const frame = await processIncomingMessage(message.toString());
+        // publish processed frame to all listening clients in the app channel
+        broadcastToAllListeners(appChannel, JSON.stringify({
+          type: 'frame',
+          payload: frame
+        }))
       }
       catch(err){
         console.error(err);
       }
- 
     });
-  });  
+  });
+
+  appChannel.on('connection', function appWebsocketConnection(client){
+    client.on('message', function incomingAppWebsocketMessage(message){
+      // rebroadcast message to all listening sockets in the app channel
+      broadcastToAllListeners(appChannel, message.toString())
+    });
+  });
 }
 
 if(USE_MULTI_PROCESS && cluster.isPrimary){
@@ -46,7 +58,7 @@ if(USE_MULTI_PROCESS && cluster.isPrimary){
 }
 else {
   // worker
-  startWebsocketServer()
+  startWebsocketServers()
     .catch(
       err => {
         console.error(err);

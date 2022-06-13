@@ -1,18 +1,16 @@
 import 'dotenv/config';
 import path from 'path';
 import fsPromises from 'fs/promises';
-import ws from 'ws';
 import { processIncomingMessage } from './lib/bodypix';
+import { broadcastToAllListeners, startAppChannel } from './lib/websocket';
 
-const { WEBSOCKET_PORT=8080 } = process.env;
 const wait = (ms=0) => new Promise(
   resolve => setTimeout(resolve, ms)
 );
 
 async function startWebsocketServer(){
-  // WORKER
-  const wss = new ws.Server({ port: WEBSOCKET_PORT });
-  wss.on('error', console.error);
+  const appChannel = startAppChannel();
+  appChannel.on('error', console.error);
   const tmpDir = path.join(__dirname, '../temp/frames');
   const files = await fsPromises.readdir(tmpDir);
 
@@ -50,14 +48,10 @@ async function startWebsocketServer(){
 
   for await (const frameMessage of frameIterator){
     const frame = await processIncomingMessage(frameMessage.toString());
-    wss.clients.forEach(function each(client) {
-      if (client.readyState === ws.OPEN) {
-        client.send(JSON.stringify({
-          type: 'frame',
-          payload: frame
-        }));
-      }
-    });    
+    broadcastToAllListeners(appChannel, JSON.stringify({
+      type: 'frame',
+      payload: frame
+    }));
   }    
 }
 

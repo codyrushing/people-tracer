@@ -1,7 +1,7 @@
 import pointInPolygon from 'point-in-polygon';
 import glVec2 from 'gl-vec2';
 import { memoize } from 'lodash';
-// import { vectorDifference } from './vector';
+import { vectorDifference } from './vector';
 
 export const KEYPOINTS = [
   'nose',
@@ -181,7 +181,7 @@ function getScoreAdjustedVertex({ rEdge, rEmpty, vertex } : ScoreAdjustedVertexP
   const dx = rEdge.x - rEmpty.x;
   const dy = rEdge.y - rEmpty.y;
 
-  const scoreAdjustmentFactor = Math.sqrt(1 - score);
+  const scoreAdjustmentFactor = 1 - score;
   return [
     vertex[0] + (dx * scoreAdjustmentFactor),
     vertex[1] + (dy * scoreAdjustmentFactor)
@@ -310,6 +310,15 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
                 return !lastBinaryContourVertex || !(vx === lastBinaryContourVertex[0] && vy === lastBinaryContourVertex[1])
               }
             );
+            // .sort(
+            //   (a, b) => {
+            //     if(!lastBinaryContourVertex){
+            //       return 0;
+            //     }
+            //     return glVec2.len(vectorDifference(lastBinaryContourVertex, a)) - glVec2.len(vectorDifference(lastBinaryContourVertex, b));
+            //   }
+            // );
+
           // add binary vertices to binary contour
           binaryContour = binaryContour.concat(
             sharedBinaryVertices
@@ -344,6 +353,8 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
         // no more contiguous empty neighbors, try to find a new edge region
         currentEdgeRegion = getNextEdgeRegion(currentEdgeRegion, getLastBinaryContourVertex());
 			}
+      // pop last item, since it overlaps with the start
+      contour.pop();
       contours.push(contour);
     }
     // iterate
@@ -355,37 +366,37 @@ export function convertHeatmapToContours(heatmap:Heatmap) : Contour[]{
   }
 
   // post process contours
-  // TODO remove contiguous points that have the same slope
   contours = contours.map(
     c => {
-      // c = c.reduce(
-      //   (acc, v, i, arr) => {
-      //     const prev = arr[i-1];
-      //     if(
-      //       prev
-      //       &&
-      //       glVec2.len(vectorDifference(v, prev)) < 1
-      //     ){
-      //       acc.pop();
-      //       acc.push([
-      //         (v[0]+prev[0])/2,
-      //         (v[1]+prev[1])/2
-      //       ])
-      //     }
-      //     else {
-      //       acc.push(v);
-      //     }
-      //     return acc;
-      //   },
-      //   []
-      // );
-
+      // if two adjacent points are less than 1 unit apart, average them as one point
       c = c.reduce(
         (acc, v, i, arr) => {
-          const prev1 = arr[i-1];
-          const prev2 = arr[i-2];
+          const prev = arr[i-1];
           if(
-            i < arr.length-3 &&
+            prev
+            &&
+            glVec2.len(vectorDifference(v, prev)) < 1
+          ){
+            acc.pop();
+            acc.push([
+              (v[0]+prev[0])/2,
+              (v[1]+prev[1])/2
+            ])
+          }
+          else {
+            acc.push(v);
+          }
+          return acc;
+        },
+        []
+      );
+
+      // remove points that have the same slope
+      c = c.reduce(
+        (acc, v, i, arr) => {
+          const prev1 = acc[i-1];
+          const prev2 = acc[i-2];
+          if(
             prev1 && prev2 &&
             getSlope(prev2, prev1) === getSlope(prev1, v)
           ){

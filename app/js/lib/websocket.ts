@@ -1,30 +1,26 @@
 import ws from 'websocket';
 import eventEmitter from './event-emitter';
 
-const { WEBSOCKET_HOST } = process.env;
+const { APP_WEBSOCKET_HOST } = process.env;
 
-let client;
-export function getClient(){
-  return client;
-}
-
-function createWebsocket(){
-  client = new ws.w3cwebsocket(WEBSOCKET_HOST);
-
-  // reinstantiate on error
-  client.onerror = function(err) {
+export function connectToWebsocketChannel(host:string) : WebSocket {
+  const client = new ws.w3cwebsocket(host);
+  function reconnect(err) {
     setTimeout(
-      createWebsocket,
+      () => connectToWebsocketChannel(host),
       1000
     );
     console.error(err);
   };
+
+  client.onclose = reconnect;
+  client.onerror = reconnect;
   
-  client.onmessage = ({data}) => {
+  client.onmessage = function onMessage({data}){
     if(typeof data === 'string'){
       try {
         const { type, payload } = JSON.parse(data);
-        eventEmitter.emit(type, payload);  
+        eventEmitter.emit(type, payload);
       }
       catch(err){
         console.error(err);
@@ -35,4 +31,4 @@ function createWebsocket(){
   return client;
 }
 
-createWebsocket();
+export const CommandsClient = connectToWebsocketChannel(APP_WEBSOCKET_HOST);

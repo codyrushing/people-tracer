@@ -2,6 +2,7 @@ import * as PIXI from 'pixi.js';
 import { app } from '../app';
 import eventEmitter from '../lib/event-emitter';
 import { Frame, PersonGroup } from '../../../util/trace';
+import simplify from 'simplify-path';
 
 const FRAMERATE_CONTAINER_NAME = 'frameRateContainer';
 const MAIN_CONTAINER_NAME = 'mainContainer';
@@ -87,6 +88,7 @@ async function destroy(){
 
 async function run(){
   let renderSeconds = [];
+
   app.ticker.add(
     function onDebugRender(seconds) {
       renderSeconds.unshift(seconds);
@@ -107,6 +109,9 @@ async function run(){
       // render things
       for(const personGroupRenderData of allRenderData){
         const { personGroup, container, isExiting } = personGroupRenderData;
+
+        const path = simplify(personGroup.contour, 0.01);
+
         const g = new PIXI.Graphics();
         g.closePath();
 
@@ -122,7 +127,7 @@ async function run(){
         g.lineStyle(2, 0xffd900, 1);
 
         let i = 0;
-        for(const [x,y] of personGroup.contour.slice(0, personGroup.contour.length-6)){
+        for(const [x,y] of path){
           if(i === 0){
             g.moveTo(x * width, y * height);
           }
@@ -137,7 +142,6 @@ async function run(){
         container.addChild(g);
         app.stage.addChild(container);
       }
-
 
     }
   );

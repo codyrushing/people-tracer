@@ -38,12 +38,14 @@
     "ndarray-pack": "^1.2.1",
     "pixi.js": "^6.2.0",
     "point-in-polygon": "^1.1.0",
+    "simplify-path": "^1.1.0",
     "websocket": "^1.0.34",
     "ws": "^7.4.6"
   },
   "devDependencies": {
     "@parcel/transformer-less": "^2.0.1",
     "@types/node": "^17.0.42",
+    "@types/ws": "^8.5.3",
     "less": "^4.1.1",
     "nodemon": "^2.0.12",
     "parcel": "^2.0.1",
