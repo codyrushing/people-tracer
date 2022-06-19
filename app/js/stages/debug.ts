@@ -7,67 +7,116 @@ import simplify from 'simplify-path';
 const FRAMERATE_CONTAINER_NAME = 'frameRateContainer';
 const MAIN_CONTAINER_NAME = 'mainContainer';
 
-interface PersonGroupRenderData {
-  personGroup: PersonGroup;
+interface RenderableItemMeta {
   frame: Frame;
-  container: PIXI.Container;
+  container?: PIXI.Container;
   isEntering?: boolean;
   isExiting?: boolean;
 }
 
-let frames : Frame[] = [];
-let allRenderData : PersonGroupRenderData[] = [];
+interface RenderableItem {
+  personGroup: PersonGroup;
+  meta: RenderableItemMeta;
+}
+
+interface RenderState {
+  frames: Frame[];
+  items: RenderableItem[];
+}
+
+interface RenderStateUpdate {
+  frames?: Frame[];
+  items?: RenderableItem[];
+}
+
 function getContainerNameForPersonGroup(personGroup : PersonGroup){
   return `persongroup_${personGroup.id}`;
 }
 
-// the purpose of this function is to update allRenderData
-function onDebugFrame(frame) : PersonGroupRenderData[] {
+function renderStateFactory(frames: Frame[] = [], items: RenderableItem[] = []) : [() => RenderState, (r:RenderStateUpdate) => RenderState] {
+  let currentRenderState : RenderState = {
+    frames,
+    items
+  };
+
+  return [
+    function _getRenderState() : RenderState {
+      return currentRenderState;
+    },    
+    function _setRenderState({frames, items}) : RenderState {
+      if(frames){
+        currentRenderState.frames = frames;
+      }
+      if(items){
+        currentRenderState.items = items;
+      }
+      return currentRenderState;
+    }
+  ]
+}
+
+const [getRenderState, setRenderState] = renderStateFactory();
+
+function onDebugFrame(frame:Frame) : RenderState {
+  let { frames, items } = getRenderState();
+
   frames.unshift(frame);
   frames = frames.slice(0,5);
 
   // remove any that were previously exiting
-  allRenderData = allRenderData.filter(({isExiting}) => !isExiting);
+  // TODO remove the pixi container from here
+  items = items.filter(({meta}) => {
+    const stillExists = !meta?.isExiting;
+    if(!stillExists && meta?.container?.parent){
+      let containerIndex = meta.container.parent.getChildIndex(meta.container);
+      if(typeof containerIndex === 'number'){
+        meta.container.parent.removeChildAt(containerIndex);
+      }
+    }
+    return stillExists;
+  });
 
   // set all previous items to exiting
   // if they are not exiting, this will be set to false in the next step
-  for(const renderData of allRenderData){
-    renderData.isEntering = false;
-    renderData.isExiting = true;
+  for(const item of items){
+    item.meta.isEntering = false;
+    item.meta.isExiting = true;
   }
 
-  // iterate through all personGroups
+  // iterate through all personGroups, and insert/update the renderable item in the RenderState
   for(const personGroup of frame.personGroups){
-    // find matching group by id
-    let renderData = allRenderData.find(({personGroup:pg}) => pg.id === personGroup.id);
-    let renderUpdate : any = {
-      personGroup,
+    // find matching renderableItem by id
+    let renderableItem = items.find(({personGroup:pg}) => pg.id === personGroup.id);    
+    let meta : RenderableItemMeta = {
       frame,
+      isEntering: false,
       isExiting: false
     };
-    if(!renderData){
+    // insert new item
+    if(!renderableItem){
       let container = new PIXI.Container();
       container.name = getContainerNameForPersonGroup(personGroup);
-      renderData = {
-        ...renderUpdate,
-        container,
-        isEntering: true
+      renderableItem = {
+        personGroup,
+        meta: {
+          ...meta,
+          container,
+          isEntering: true
+        }
       }
       // add to allRenderData
-      allRenderData.push(renderData);
+      items.push(renderableItem);
     }
+    // update existingItem
     else {
       // apply updates
-      Object.assign(renderData, renderUpdate);
-    }
+      renderableItem.personGroup = personGroup;
+      Object.assign(renderableItem.meta, meta);
+    }    
   }
-  return allRenderData;
-}
 
-const waitingText = new PIXI.Text('Waiting for frames...', new PIXI.TextStyle({
-  fontFamily: 'monospace',
-  fill: '#ffffff'
-}));
+  return setRenderState({items});
+}
 
 async function init(){
   eventEmitter.on('frame', onDebugFrame);
@@ -81,16 +130,21 @@ async function init(){
 }
 
 async function destroy(){
-  //
-  // eventEmitter.off('frame', onDebugFrame);
-  // console.log('destroy');
+  eventEmitter.off('frame', onDebugFrame);
+  console.log('destroy');
 }
 
 async function run(){
   let renderSeconds = [];
 
+  const waitingText = new PIXI.Text('Waiting for frames...', new PIXI.TextStyle({
+    fontFamily: 'monospace',
+    fill: '#ffffff'
+  }));
+
   app.ticker.add(
     function onDebugRender(seconds) {
+      const { frames, items } = getRenderState();
       renderSeconds.unshift(seconds);
       renderSeconds = renderSeconds.slice(0, 5);
       const { offsetWidth: width, offsetHeight: height } = app.view;
@@ -107,13 +161,14 @@ async function run(){
       app.stage.removeChild(waitingText);
 
       // render things
-      for(const personGroupRenderData of allRenderData){
-        const { personGroup, container, isExiting } = personGroupRenderData;
+      for(const renderableItem of items){
+        const { personGroup, meta: { container, isExiting } } = renderableItem;
 
-        const path = simplify(personGroup.contour, 0.01);
+        const path = personGroup.contour;
+        // const path = simplify(personGroup.contour, 0.01);
 
         const g = new PIXI.Graphics();
-        g.closePath();
+        // g.closePath();
 
         app.stage.removeChild(container);
         container.removeChildren();

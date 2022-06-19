@@ -2,11 +2,12 @@ import mitt from 'mitt';
 import { Frame } from '../../../util/trace';
 
 type Events = {
-  frame: Frame,
+  frame: Frame;
   startProgramStage: {
     name: string
-  },
-  command: string
+  };
+  reconnect: any;
+  command: string;  
 }
 
 const emitter = mitt<Events>();

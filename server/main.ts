@@ -2,9 +2,8 @@ import 'dotenv/config';
 import cluster from 'cluster';
 import os = require('os');
 import { startRemoteBodypix, processIncomingMessage } from './lib/bodypix';
-import { startChannel, startAppChannel, broadcastToAllListeners } from './lib/websocket';
+import { startFramesChannel, startAppChannel, broadcastToAllListeners } from './lib/websocket';
 
-const { FRAMES_WEBSOCKET_PORT=8080 } = process.env;
 const numCPUs = os.cpus().length;
 
 /*
@@ -16,7 +15,7 @@ const numCPUs = os.cpus().length;
 const USE_MULTI_PROCESS = false;
 export async function startWebsocketServers(){
   // WORKER
-  const framesChannel = startChannel(Number(FRAMES_WEBSOCKET_PORT));
+  const framesChannel = startFramesChannel();
   const appChannel = startAppChannel();
 
   framesChannel.on('error', console.error);

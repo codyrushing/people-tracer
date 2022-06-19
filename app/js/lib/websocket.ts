@@ -3,14 +3,18 @@ import eventEmitter from './event-emitter';
 
 const { APP_WEBSOCKET_HOST } = process.env;
 
+let delayFibonaccis = [0,1];
 export function connectToWebsocketChannel(host:string) : WebSocket {
-  const client = new ws.w3cwebsocket(host);
+  let client = new ws.w3cwebsocket(host);
   function reconnect(err) {
-    setTimeout(
-      () => connectToWebsocketChannel(host),
-      1000
-    );
-    console.error(err);
+    if(err){
+      console.error(err);
+    }
+    const delay = delayFibonaccis[0] + delayFibonaccis[1];
+    delayFibonaccis.shift();
+    delayFibonaccis.push(delay);
+    client = connectToWebsocketChannel(host);
+    return client;
   };
 
   client.onclose = reconnect;
@@ -27,8 +31,28 @@ export function connectToWebsocketChannel(host:string) : WebSocket {
       }
     }
   };
-
   return client;
 }
 
-export const CommandsClient = connectToWebsocketChannel(APP_WEBSOCKET_HOST);
+let AppSocketClient;
+export function createWebsocketConnection(host=APP_WEBSOCKET_HOST) : WebSocket {
+  AppSocketClient = connectToWebsocketChannel(host);
+  return AppSocketClient;
+}
+
+export function getAppSocketClient() : WebSocket {
+  if(AppSocketClient){
+    return AppSocketClient;
+  }
+  return createWebsocketConnection();
+}
+
+getAppSocketClient();
+
+eventEmitter.on(
+  'reconnect', 
+  function onReconnectEvent(){
+    const client = getAppSocketClient();
+    client.onclose(null);
+  }
+);
