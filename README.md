@@ -16,7 +16,7 @@ BlazePose resources:
   * https://github.com/tensorflow/tfjs-models/tree/master/body-segmentation
   * https://github.com/tensorflow/tfjs-models/tree/master/pose-detection
 * Pose estimation: https://storage.googleapis.com/tfjs-models/demos/pose-detection/index.html?model=blazepose
-* 
+* Segmentation: https://storage.googleapis.com/tfjs-models/demos/segmentation/index.html?model=blazepose
 
 Open questions:
 * If we centralize all inference into a single machine which is also rendering the app, can it handle two camera feeds simultaneously?  Could we use other software to compose those videos together into a single feed?  Or could we separate the inference from the rendering at the expense of greater complexity.
