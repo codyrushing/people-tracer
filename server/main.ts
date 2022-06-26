@@ -9,7 +9,7 @@ const numCPUs = os.cpus().length;
 /*
 // there are two different websocket servers (channels)
 1. One for the Coral boards publish raw frames
-2. One for the 
+2. One for the visualizer
 */
 
 const USE_MULTI_PROCESS = false;

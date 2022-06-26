@@ -2,7 +2,7 @@ import * as PIXI from 'pixi.js';
 import { app } from '../app';
 import eventEmitter from '../lib/event-emitter';
 import { Frame, PersonGroup } from '../../../util/trace';
-import simplify from 'simplify-path';
+// import simplify from 'simplify-path';
 
 const FRAMERATE_CONTAINER_NAME = 'frameRateContainer';
 const MAIN_CONTAINER_NAME = 'mainContainer';
@@ -64,14 +64,11 @@ function onDebugFrame(frame:Frame) : RenderState {
   frames = frames.slice(0,5);
 
   // remove any that were previously exiting
-  // TODO remove the pixi container from here
   items = items.filter(({meta}) => {
     const stillExists = !meta?.isExiting;
+    // remove the container from the app if exiting
     if(!stillExists && meta?.container?.parent){
-      let containerIndex = meta.container.parent.getChildIndex(meta.container);
-      if(typeof containerIndex === 'number'){
-        meta.container.parent.removeChildAt(containerIndex);
-      }
+      meta.container.parent.removeChild(meta.container);
     }
     return stillExists;
   });
@@ -160,7 +157,7 @@ async function run(){
 
       app.stage.removeChild(waitingText);
 
-      // render things
+      // render items
       for(const renderableItem of items){
         const { personGroup, meta: { container, isExiting } } = renderableItem;
 
