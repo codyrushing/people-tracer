@@ -2,7 +2,7 @@
   "compilerOptions": {
     "baseUrl": "./",
     "lib": ["ES2019", "dom"],
-    "module": "commonjs",
+    "module": "ESNext",
     "target": "ESNext",
     "moduleResolution": "node",
     "noUnusedLocals": true,
@@ -14,8 +14,9 @@
     // "noEmit": true,
     "rootDir": "./",
     "outDir": "./build"
+    
   },
-  "include": ["**/*.ts"],
+  "include": ["**/*.ts", "app/js/app.tsx", "app/js/app.tsx"],
   "exclude": [
     "node_modules/**/*",
     "build/**/*",

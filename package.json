@@ -28,6 +28,11 @@
   },
   "homepage": "https://github.com/codyrushing/people-tracer#readme",
   "dependencies": {
+    "@mediapipe/camera_utils": "^0.3.1657298508",
+    "@tensorflow-models/coco-ssd": "^2.2.2",
+    "@tensorflow/tfjs-backend-cpu": "^3.18.0",
+    "@tensorflow/tfjs-backend-webgl": "^3.18.0",
+    "@tensorflow/tfjs-core": "^3.18.0",
     "chaikin-smooth": "^1.0.4",
     "contour-2d": "^1.0.0",
     "dotenv": "^7.0.0",
@@ -38,6 +43,8 @@
     "ndarray-pack": "^1.2.1",
     "pixi.js": "^6.2.0",
     "point-in-polygon": "^1.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "simplify-path": "^1.1.0",
     "websocket": "^1.0.34",
     "ws": "^7.4.6"
@@ -45,10 +52,15 @@
   "devDependencies": {
     "@parcel/transformer-less": "^2.0.1",
     "@types/node": "^17.0.42",
+    "@types/react": "^18.0.15",
+    "@types/react-dom": "^18.0.6",
     "@types/ws": "^8.5.3",
+    "autoprefixer": "^10.4.7",
     "less": "^4.1.1",
     "nodemon": "^2.0.12",
     "parcel": "^2.0.1",
+    "postcss": "^8.4.14",
+    "tailwindcss": "^3.1.5",
     "ts-node": "^10.0.0",
     "typescript": "^4.3.2"
   }
