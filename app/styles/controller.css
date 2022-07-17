@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import 'modern-css-reset';
+
+body {
+  background: #333;
+}
+
+.video-input-container {
+  display: flex;
+}
+
+#video-input {
+  display: block;
+}

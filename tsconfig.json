@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "jsx": "react-jsx",
     "baseUrl": "./",
     "lib": ["ES2019", "dom"],
     "module": "ESNext",
@@ -16,7 +17,7 @@
     "outDir": "./build"
     
   },
-  "include": ["**/*.ts", "app/js/app.tsx", "app/js/app.tsx"],
+  "include": ["**/*.ts", "**/*.tsx"],
   "exclude": [
     "node_modules/**/*",
     "build/**/*",

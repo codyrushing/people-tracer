@@ -1,6 +1,6 @@
 import { throttle } from 'lodash';
 import eventEmitter from '../lib/event-emitter';
-import { getContainer } from '../app';
+import { getContainer } from '../control-panel';
 
 export function getDimensionsFromFrame() : Promise<[number, number]> {
   return new Promise(

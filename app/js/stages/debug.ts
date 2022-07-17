@@ -1,5 +1,5 @@
 import * as PIXI from 'pixi.js';
-import { app } from '../app';
+import { app } from '../control-panel';
 import eventEmitter from '../lib/event-emitter';
 import { Frame, PersonGroup } from '../../../util/trace';
 // import simplify from 'simplify-path';
