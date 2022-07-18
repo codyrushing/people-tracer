@@ -4,7 +4,11 @@
 @import 'modern-css-reset';
 
 body {
-  background: #333;
+  @apply bg-slate-900;
+}
+
+h1 {
+  @apply text-5xl;
 }
 
 .video-input-container {
@@ -13,4 +17,14 @@ body {
 
 #video-input {
   display: block;
+}
+
+.form-element {
+  @apply p-2;
+  @apply my-2;
+  @apply bg-gray-700;
+}
+
+select {
+  @apply form-element;
 }
