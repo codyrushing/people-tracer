@@ -1,50 +1,28 @@
 import { MutableRefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useRecoilState } from 'recoil';
+import { useRecoilState, useRecoilValue } from 'recoil';
 import '@tensorflow/tfjs-backend-cpu';
 import '@tensorflow/tfjs-backend-webgl';
-import * as cocoSsd from '@tensorflow-models/coco-ssd';
-import { engineMode, objectDetectionBase } from '../state';
-
-// export async function _TracerEngine(){
-//   const model = await cocoSsd.load();
-//   const aspectRatio = 16/9;
-//   const video : HTMLVideoElement = document.querySelector('video#input-video');
-//   const stream = await navigator.mediaDevices.getUserMedia({ 
-//     video: {
-//       width: 1280, 
-//       height: 720, 
-//       facingMode: 'user'
-//     }, 
-//     audio: false 
-//   });
-
-//   video.srcObject = stream;
-//   video.play();
-
-//   let streaming;
-//   video.addEventListener('canplay', function(ev){
-//     if (!streaming) {
-//       // video.setAttribute('width', width.toString());
-//       // video.setAttribute('height', height.toString());
-//       streaming = true;
-//     }
-//   }, false);
-// }
-
-// export async function (video:HTMLVideoElement){
-
-// }
+// import * as cocoSsd from '@tensorflow-models/coco-ssd';
+import { 
+  availableCameras, 
+  objectDetectionBase,
+  availableModels,
+  videoSource,
+  availableVideoSources,
+  selectedCamera
+} from '../state';
 
 export function TracerEngineVideo() : JSX.Element {
   const videoElement : MutableRefObject<HTMLVideoElement> = useRef();
   const [streaming, setStreaming] = useState(false);
+  const camera = useRecoilValue(selectedCamera);
 
   async function useCamera(video:HTMLVideoElement) : Promise<HTMLVideoElement> {
     const stream = await navigator.mediaDevices.getUserMedia({ 
       video: {
         width: 1280, 
-        height: 720, 
-        facingMode: 'user'
+        height: 720,
+        deviceId: camera.deviceId
       }, 
       audio: false 
     });
@@ -66,19 +44,10 @@ export function TracerEngineVideo() : JSX.Element {
         useCamera(videoElement.current);        
       }
     },
-    []
+    [camera]
   );
 
-  useEffect(
-    () => {
-      if(streaming){
-        //
-      }
-    },
-    [streaming]
-  );
-
-  return <div className="flex">    
+  return <div className="flex">
     <video className="input-video" ref={videoElement}></video>
   </div>;
 };
@@ -90,12 +59,11 @@ export function ObjectDetectionBase() : JSX.Element {
     setMode(value);
   }
 
-  const modes = ['lite_mobilenet_v2', 'mobilenet_v2', 'mobilenet_v1']
-
   return <div className="tracer-engine-options">
+    <label className="block">Object detection model:</label>
     <select onChange={onChange} defaultValue={mode}>
       {
-        modes.map(
+        availableModels.map(
           m => <option key={m} value={m}>{m}</option>
         )
       }
@@ -103,17 +71,77 @@ export function ObjectDetectionBase() : JSX.Element {
   </div>
 }
 
-export function TracerEngineOptions() : JSX.Element {
-  const [mode, setMode] = useRecoilState(objectDetectionBase);
+export function SourceSelect() : JSX.Element {
+  const [source, setSource] = useRecoilState(videoSource);
 
-  function onChange({target: {value}}){
-    setMode(value);
+  function onChange({target: { value }}){
+    setSource(value);
   }
 
-  const modes = ['lite_mobilenet_v2', 'mobilenet_v2', 'mobilenet_v1']
+  return <div className="source-selector">
+    <label className="block">Source:</label>
+    <select onChange={onChange} defaultValue={source}>
+      {
+        availableVideoSources.map(
+          videoSource => <option key={videoSource} value={videoSource}>{videoSource}</option>
+        )
+      }
+    </select>
+  </div>
+}
 
-  return <div className="tracer-engine-options">
-    <ObjectDetectionBase />
+export function InputCameraSelect() : JSX.Element {
+  const availableCameraInputs = useRecoilValue(availableCameras);
+  const [camera, setCamera] = useRecoilState(selectedCamera);
+  
+  useEffect(
+    () => {
+      if(availableCameraInputs.length && !camera){
+        setCamera(availableCameraInputs[0])
+      }
+    },
+    [availableCameraInputs]
+  )
+
+  function onChange({target: { value }}){
+    setCamera(availableCameraInputs.find(camera => camera.deviceId === value))
+  }
+
+  if(!camera){
+    return <p>No camera found</p>
+  }
+
+  return <div className="camera-selector">
+    <label className="block">Camera input:</label>
+    <select onChange={onChange} defaultValue={camera.deviceId}>
+      {
+        availableCameraInputs.map(
+          availableCamera => <option key={availableCamera.deviceId} value={availableCamera.deviceId}>{availableCamera.label}</option>
+        )
+      }
+    </select>
+  </div>
+}
+
+export function InputFileSelect() : JSX.Element {
+  return <p>File select goes here</p>
+}
+
+export function InputSelect() : JSX.Element {
+  const [source] = useRecoilState(videoSource);
+
+  if(source === 'file'){
+    return <InputFileSelect />
+  }
+
+  return <InputCameraSelect />
+}
+
+export function TracerEngineOptions() : JSX.Element {
+  return <div className="tracer-engine-options flex gap-4">
+    <SourceSelect />
+    <InputSelect />
+    <ObjectDetectionBase /> 
   </div>
 }
 

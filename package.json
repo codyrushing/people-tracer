@@ -32,6 +32,7 @@
     "@tensorflow-models/coco-ssd": "^2.2.2",
     "@tensorflow/tfjs-backend-cpu": "^3.18.0",
     "@tensorflow/tfjs-backend-webgl": "^3.18.0",
+    "@tensorflow/tfjs-converter": "^3.19.0",
     "@tensorflow/tfjs-core": "^3.18.0",
     "chaikin-smooth": "^1.0.4",
     "contour-2d": "^1.0.0",

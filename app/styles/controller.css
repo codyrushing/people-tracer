@@ -20,11 +20,15 @@ h1 {
 }
 
 .form-element {
-  @apply p-2;
-  @apply my-2;
-  @apply bg-gray-700;
+  @apply p-1.5;
+  @apply bg-gray-700;  
 }
 
 select {
   @apply form-element;
+  @apply cursor-pointer;
+  @apply hover:bg-gray-500;
+  @apply focus:bg-gray-500;
+  @apply focus:outline-none;
+  @apply rounded-sm;
 }
