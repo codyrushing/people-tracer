@@ -20,26 +20,26 @@ export const availableCameras = selector({
   }
 });
 
-// export const selectedCamera = selectorFamily({
-//   key: 'selectedCamera',
-//   get: deviceId => ({get}) => {
-//     const cameras = get(availableCameras);
-//     return deviceId
-//       ? cameras.find(camera => camera.deviceId === deviceId)
-//       : cameras[0];
-//   },
-// });
+export const selectedVideoFile = atom({
+  'key': 'selectedVideoFile',
+  default: null
+});
 
 export const selectedCamera = atom({
   key: 'selectedCamera',
   default: null
 });
 
-export const availableVideoSources = ['camera', 'file'];
-export const videoSource = atom({
-  key: 'videoSource',
-  default: availableVideoSources[0]
-})
+export const availableVideoSourceTypes = ['camera', 'file'];
+export const videoSourceType = atom({
+  key: 'videoSourceType',
+  default: availableVideoSourceTypes[0]
+});
+
+export const inputVideoElement = atom({
+  key: 'inputVideoElement',
+  default: null
+});
 
 // export function getObjectDetectionModel(config:coco.ModelConfig){
 //   return atom({

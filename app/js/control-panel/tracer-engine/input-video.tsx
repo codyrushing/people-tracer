@@ -10,7 +10,8 @@ import {
   videoSourceType,
   availableVideoSourceTypes,
   selectedCamera,
-  selectedVideoFile
+  selectedVideoFile,
+  inputVideoElement
 } from '../state';
 
 export function TracerEngineVideo() : JSX.Element {
@@ -18,6 +19,7 @@ export function TracerEngineVideo() : JSX.Element {
   const videoElement : MutableRefObject<HTMLVideoElement> = useRef();
   const [streaming, setStreaming] = useState(false);
   const camera = useRecoilValue(selectedCamera);
+  const [_, setInputVideoElement] = useRecoilState(inputVideoElement);
   const videoFile = useRecoilValue(selectedVideoFile);
 
   async function useCamera(video:HTMLVideoElement) : Promise<HTMLVideoElement> {
@@ -55,6 +57,15 @@ export function TracerEngineVideo() : JSX.Element {
   useLayoutEffect(
     () => {
       if(videoElement.current){
+        setInputVideoElement(videoElement.current);
+      }
+    },
+    []
+  );
+
+  useLayoutEffect(
+    () => {
+      if(videoElement.current){
         if(sourceType === 'camera'){
           useCamera(videoElement.current);
         }
@@ -64,7 +75,7 @@ export function TracerEngineVideo() : JSX.Element {
       }
     },
     [camera, videoFile, sourceType]
-  );
+  );  
 
   return <div className="flex">
     <video controls muted loop className="input-video" ref={videoElement}></video>
@@ -174,7 +185,7 @@ export function TracerEngineOptions() : JSX.Element {
   </div>
 }
 
-export default function TracerEngine() : JSX.Element {
+export default function InputVideoSettings() : JSX.Element {
   return <section className="tracer-engine flex flex-col gap-6 mt-6">
     <TracerEngineOptions />
     <TracerEngineVideo />

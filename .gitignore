@@ -107,3 +107,5 @@ temp/
 build/
 .DS_Store
 .parcel-cache
+
+app/static
