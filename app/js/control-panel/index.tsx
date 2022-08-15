@@ -27,7 +27,7 @@ export function ControlPanelPage() : JSX.Element {
   return <RecoilRoot>
     <div className="control-panel-page py-5 max-w-7xl mx-auto text-slate-200 font-mono">
       <h1>Control Panel</h1>
-      <TracerEngine />
+      <TracerEngine />      
     </div>    
   </RecoilRoot>;
 }

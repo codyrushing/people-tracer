@@ -1,12 +1,13 @@
-import { atom, selector, selectorFamily } from 'recoil';
+import { atom, selector, RecoilState } from 'recoil';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
+import { InferenceEngine } from '../tracer-engine/inference';
 
 export async function loadObjectDetectionModel(modelConfig? : cocoSsd.ModelConfig) : Promise<cocoSsd.ObjectDetection> {
   const model = await cocoSsd.load(modelConfig);
   return model;
 }
 
-export const availableModels = ['lite_mobilenet_v2', 'mobilenet_v2', 'mobilenet_v1'];
+export const availableModels : cocoSsd.ObjectDetectionBaseModel[] = ['lite_mobilenet_v2', 'mobilenet_v2', 'mobilenet_v1'];
 export const objectDetectionBase = atom({
   key: 'objectDetectionBase',
   default: availableModels[0]
@@ -36,10 +37,15 @@ export const videoSourceType = atom({
   default: availableVideoSourceTypes[0]
 });
 
-export const inputVideoElement = atom({
-  key: 'inputVideoElement',
+export const inputHTMLVideoElement = atom({
+  key: 'inputHTMLVideoElement',
   default: null
 });
+
+export const inferenceEngine : RecoilState<InferenceEngine> = atom({
+  key: 'inferenceEngine',
+  default: null
+})
 
 // export function getObjectDetectionModel(config:coco.ModelConfig){
 //   return atom({
