@@ -13,6 +13,11 @@ export const objectDetectionBase = atom({
   default: availableModels[0]
 });
 
+export const objectDetectionScoreThreshold = atom({
+  key: 'objectDetectionScoreThreshold',
+  default: 0.2
+});
+
 export const availableCameras = selector({
   key: 'availableCameras',
   async get(){

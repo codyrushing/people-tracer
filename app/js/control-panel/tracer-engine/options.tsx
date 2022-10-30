@@ -101,10 +101,33 @@ export function InputVideoSelect() : JSX.Element {
   </div>
 }
 
+export function ObjectDetectionScoreThreshold(){
+  const [objectDetectionScoreThreshold, setObjectDetectionScoreThreshold] = useRecoilState(STATE.objectDetectionScoreThreshold);
+
+  function onChange(e){
+    setObjectDetectionScoreThreshold(e.target.value);
+  }
+
+  return <div>
+    <label className="block">Score threshold:</label>
+    <div className="flex">
+      <input 
+        type="range" 
+        min={0.0} 
+        max={1.0}
+        step={0.05} 
+        onChange={onChange}
+        defaultValue={objectDetectionScoreThreshold} />
+      <div>{objectDetectionScoreThreshold}</div>
+    </div>
+  </div>
+}
+
 export default function TracerEngineOptions() : JSX.Element {
   return <div className="tracer-engine-options flex gap-4">
     <SourceTypeSelect />
     <InputVideoSelect />
     <ObjectDetectionBase /> 
+    <ObjectDetectionScoreThreshold />
   </div>
 }
